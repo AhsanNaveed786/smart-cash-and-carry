@@ -15,7 +15,9 @@ from routers.price_import_router import (
     router as price_import_router,
 )
 from fastapi.staticfiles import StaticFiles
-
+from routers.category_media_router import (
+    router as category_media_router,
+)
 from routers.content_router import router as content_router
 from services.media_service import (
     STATIC_DIRECTORY,
@@ -81,7 +83,8 @@ app.include_router(storefront_price_router)
 app.include_router(price_import_router)
 app.include_router(product_import_router)
 app.include_router(content_router)
-
+app.include_router(category_router)
+app.include_router(category_media_router)
 @app.get("/")
 def root():
     return {

@@ -77,6 +77,11 @@ class Category(Base):
             "display_order >= 0",
             name="category_display_order_non_negative",
         ),
+        CheckConstraint(
+            "display_mode IN "
+            "('default_heading', 'custom_image_banner')",
+            name="category_valid_display_mode",
+        ),
     )
 
     id: Mapped[int] = mapped_column(
@@ -105,6 +110,19 @@ class Category(Base):
         String(500),
         nullable=True,
     )
+
+    banner_image_url: Mapped[str | None] = mapped_column(
+        String(500),
+        nullable=True,
+    )
+
+    display_mode: Mapped[str] = mapped_column(
+        String(30),
+        nullable=False,
+        default="default_heading",
+        server_default="default_heading",
+    )
+
 
     display_order: Mapped[int] = mapped_column(
         Integer,
@@ -1024,7 +1042,7 @@ class DiscountPrice(Base):
 
     branch: Mapped[Branch] = relationship()
 
-    class WebsiteSetting(Base):
+class WebsiteSetting(Base):
     __tablename__ = "website_settings"
 
     __table_args__ = (
