@@ -1,0 +1,13 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+psycopg[binary]
+python-dotenv
+jinja2
+python-multipart
+pydantic[email]
+pillow
+openpyxl
+xlrd
+groq
+pwdlib[argon2]
