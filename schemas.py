@@ -743,3 +743,74 @@ class ProductAvailabilityResponse(SchemaBase):
     stock_message: str | None
     created_at: datetime
     updated_at: datetime
+
+class ProductAvailabilityBulkUpdate(SchemaBase):
+    product_ids: list[int] = Field(
+        min_length=1,
+        max_length=500,
+    )
+    branch_ids: list[int] = Field(
+        min_length=1,
+        max_length=10,
+    )
+    is_in_stock: bool
+    stock_message: str | None = Field(
+        default=None,
+        max_length=100,
+    )
+
+    @field_validator(
+        "product_ids",
+        "branch_ids",
+    )
+    @classmethod
+    def validate_unique_positive_ids(
+        cls,
+        values: list[int],
+    ) -> list[int]:
+        if any(value <= 0 for value in values):
+            raise ValueError(
+                "Every ID must be greater than zero."
+            )
+
+        if len(values) != len(set(values)):
+            raise ValueError(
+                "Duplicate IDs are not allowed."
+            )
+
+        return values
+
+
+class StorefrontAvailabilityResponse(SchemaBase):
+    availability_record_id: int | None
+    product_id: int
+    branch_id: int
+    is_in_stock: bool
+    stock_message: str | None
+    availability_source: Literal[
+        "default",
+        "branch_record",
+    ]
+
+
+class BranchAvailabilityItemResponse(
+    StorefrontAvailabilityResponse
+):
+    barcode: str
+    product_name: str
+    category_id: int
+    image_url: str | None
+
+
+class BranchAvailabilityListResponse(SchemaBase):
+    total: int
+    skip: int
+    limit: int
+    items: list[BranchAvailabilityItemResponse]
+
+
+class StorefrontContentResponse(SchemaBase):
+    branch_id: int
+    settings: WebsiteSettingResponse
+    banners: list[HomepageBannerResponse]
+    categories: list[CategoryResponse]

@@ -4,7 +4,12 @@ from fastapi import Depends, FastAPI
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 from sqlalchemy.orm import Session
-
+from routers.availability_router import (
+    router as availability_router,
+)
+from routers.storefront_content_router import (
+    router as storefront_content_router,
+)
 from database import Base, engine, get_db
 from routers.admin_auth_router import (
     router as admin_auth_router,
@@ -82,9 +87,12 @@ app.include_router(discount_router)
 app.include_router(storefront_price_router)
 app.include_router(price_import_router)
 app.include_router(product_import_router)
+app.include_router(availability_router)
+app.include_router(storefront_content_router)
 app.include_router(content_router)
 app.include_router(category_router)
 app.include_router(category_media_router)
+
 @app.get("/")
 def root():
     return {
