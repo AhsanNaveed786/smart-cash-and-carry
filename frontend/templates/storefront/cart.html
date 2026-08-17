@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="inner-hero"><div class="container"><span class="eyebrow">Your basket</span><h1>Shopping cart</h1><p>Review quantities before checkout. Final prices are confirmed by the server.</p></div></section>
+<section class="container cart-layout">
+    <div class="cart-panel"><div class="cart-panel-head"><h2>Cart items</h2><button type="button" id="clear-cart">Clear cart</button></div><div id="cart-items"></div></div>
+    <aside class="order-summary"><h2>Order summary</h2><div class="summary-line"><span>Items subtotal</span><strong id="cart-subtotal">Rs. 0</strong></div><div class="summary-line"><span>Delivery</span><strong>Calculated at checkout</strong></div><div class="summary-total"><span>Estimated total</span><strong id="cart-total">Rs. 0</strong></div><p class="summary-note"><svg class="icon"><use href="#i-shield"></use></svg> Prices and stock are validated for your selected branch before the order is placed.</p><a href="/checkout" class="button button-primary button-block" id="checkout-link">Proceed to checkout</a><a href="/shop" class="continue-shopping">Continue shopping</a></aside>
+</section>
+{% endblock %}
+
+{% block scripts %}<script src="{{ url_for('static', path='/js/cart.js') }}"></script>{% endblock %}

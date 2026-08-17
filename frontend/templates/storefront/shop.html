@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="shop-hero">
+    <div class="container"><span class="eyebrow">Everything your home needs</span><h1>Shop groceries</h1><p id="shop-context">Fresh products and prices for your selected branch.</p></div>
+</section>
+
+<section class="container shop-layout">
+    <aside class="shop-sidebar" id="shop-sidebar">
+        <div class="filter-heading"><h2>Filters</h2><button type="button" id="clear-filters">Clear</button></div>
+        <label class="filter-search"><span>Search products</span><div><input id="shop-search" type="search" placeholder="Product or barcode"><svg class="icon"><use href="#i-search"></use></svg></div></label>
+        <fieldset><legend>Categories</legend><div class="filter-options" id="category-filters"></div></fieldset>
+        <label class="toggle-row"><input id="in-stock-filter" type="checkbox" checked><span>In-stock products</span></label>
+    </aside>
+
+    <div class="shop-results">
+        <div class="results-toolbar">
+            <div><button class="mobile-filter-button" id="mobile-filter-button" type="button"><svg class="icon"><use href="#i-grid"></use></svg> Filters</button><strong id="results-count">Loading products…</strong></div>
+            <select id="shop-sort" aria-label="Sort products"><option value="name">Name A–Z</option><option value="price-low">Price: low to high</option><option value="price-high">Price: high to low</option></select>
+        </div>
+        <div class="product-grid" id="shop-product-grid"><div class="skeleton product-skeleton"></div><div class="skeleton product-skeleton"></div><div class="skeleton product-skeleton"></div><div class="skeleton product-skeleton"></div></div>
+        <div class="load-more-wrap"><button class="button button-outline" id="load-more-products" type="button" hidden>Load more products</button></div>
+    </div>
+</section>
+{% endblock %}
+
+{% block scripts %}<script src="{{ url_for('static', path='/js/shop.js') }}"></script>{% endblock %}

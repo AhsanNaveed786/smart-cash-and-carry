@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container breadcrumb"><a href="/">Home</a><svg class="icon"><use href="#i-chevron"></use></svg><a href="/shop">Shop</a><svg class="icon"><use href="#i-chevron"></use></svg><span id="product-breadcrumb">Product</span></div>
+
+<section class="container product-detail" data-product-id="{{ product_id }}" id="product-detail">
+    <div class="product-gallery-detail">
+        <div class="product-thumbnails no-scrollbar" id="product-thumbnails"></div>
+        <div class="product-main-image skeleton" id="product-main-image"></div>
+    </div>
+    <div class="product-information">
+        <span class="product-category-label" id="product-category-label">SMART essentials</span>
+        <h1 id="product-title">Loading product…</h1>
+        <p class="product-unit" id="product-unit"></p>
+        <div class="product-price-large" id="product-price-large"><span class="skeleton text-skeleton"></span></div>
+        <div class="stock-line" id="product-stock-line">Checking availability…</div>
+        <p class="product-description" id="product-description"></p>
+
+        <div class="variant-picker" id="variant-picker" hidden><label>Choose an option</label><div class="variant-options" id="variant-options"></div></div>
+
+        <div class="purchase-row">
+            <div class="quantity-stepper"><button type="button" data-qty-minus aria-label="Decrease"><svg class="icon"><use href="#i-minus"></use></svg></button><input id="product-quantity" type="number" value="1" min="1" max="99" aria-label="Quantity"><button type="button" data-qty-plus aria-label="Increase"><svg class="icon"><use href="#i-plus"></use></svg></button></div>
+            <button class="button button-primary add-product-button" id="add-product-to-cart" type="button"><svg class="icon"><use href="#i-cart"></use></svg> Add to cart</button>
+        </div>
+
+        <div class="product-promises"><div><svg class="icon"><use href="#i-pin"></use></svg><span><strong>Local pricing</strong><small id="product-branch-copy">Selected branch</small></span></div><div><svg class="icon"><use href="#i-truck"></use></svg><span><strong>Flexible fulfilment</strong><small>Delivery or self pickup</small></span></div></div>
+    </div>
+</section>
+
+<section class="section container"><div class="section-heading"><div><span class="eyebrow">You may also like</span><h2>More from this category</h2></div></div><div class="product-carousel no-scrollbar" id="related-products"></div></section>
+{% endblock %}
+
+{% block scripts %}<script>window.SMART_PRODUCT_ID = {{ product_id }};</script><script src="{{ url_for('static', path='/js/product.js') }}"></script>{% endblock %}

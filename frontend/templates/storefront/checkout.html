@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="inner-hero compact"><div class="container"><span class="eyebrow">Secure guest checkout</span><h1>Complete your order</h1></div></section>
+<section class="container checkout-layout">
+    <form class="checkout-form" id="checkout-form">
+        <section class="checkout-card"><div class="checkout-card-title"><span>1</span><div><h2>How would you like your order?</h2><p>Choose delivery or collect it from your selected branch.</p></div></div><div class="fulfilment-options"><label><input type="radio" name="fulfillment_method" value="home_delivery" checked><span><svg class="icon"><use href="#i-truck"></use></svg><strong>Home Delivery</strong><small>Minimum order Rs. 3,000</small></span></label><label><input type="radio" name="fulfillment_method" value="self_pickup"><span><svg class="icon"><use href="#i-pin"></use></svg><strong>Self Pickup</strong><small>No minimum order</small></span></label></div></section>
+
+        <section class="checkout-card"><div class="checkout-card-title"><span>2</span><div><h2>Your details</h2><p>We will use these details only to prepare your order.</p></div></div><div class="form-grid"><label><span>Full name *</span><input name="customer_name" required minlength="2" maxlength="150" autocomplete="name"></label><label><span>Phone number *</span><input name="phone_number" required minlength="7" maxlength="30" autocomplete="tel" placeholder="03xx xxxxxxx"></label><label class="full"><span>Email (optional)</span><input name="customer_email" type="email" autocomplete="email"></label></div></section>
+
+        <section class="checkout-card" id="delivery-address-card"><div class="checkout-card-title"><span>3</span><div><h2>Delivery address</h2><p>Give enough detail for a smooth delivery.</p></div></div><div class="form-grid"><label class="full"><span>Complete address *</span><textarea name="delivery_address" rows="3" maxlength="1000" placeholder="House, street, landmark"></textarea></label><label><span>City *</span><input name="city" maxlength="100"></label><label><span>Order notes</span><input name="notes" maxlength="500" placeholder="Any helpful instruction"></label></div></section>
+
+        <div class="checkout-actions-mobile"><button class="button button-primary button-block" type="submit">Place website order</button><button class="button button-whatsapp button-block" type="button" id="whatsapp-order-mobile"><svg class="icon"><use href="#i-whatsapp"></use></svg> Order on WhatsApp</button></div>
+    </form>
+
+    <aside class="checkout-summary"><h2>Your order</h2><div id="checkout-items"></div><div class="summary-line"><span>Subtotal</span><strong id="checkout-subtotal">Rs. 0</strong></div><div class="summary-line"><span>Delivery fee</span><strong id="checkout-delivery">Rs. 0</strong></div><div class="summary-total"><span>Total</span><strong id="checkout-total">Rs. 0</strong></div><div class="minimum-message" id="minimum-message"></div><button class="button button-primary button-block desktop-checkout-action" type="submit" form="checkout-form">Place website order</button><button class="button button-whatsapp button-block desktop-checkout-action" type="button" id="whatsapp-order"><svg class="icon"><use href="#i-whatsapp"></use></svg> Order on WhatsApp</button><p class="checkout-hours"><svg class="icon"><use href="#i-clock"></use></svg> Orders placed after store hours are queued for the next opening time.</p></aside>
+</section>
+
+<div class="modal-backdrop" id="order-success-modal" aria-hidden="true"><section class="success-modal" role="dialog" aria-modal="true"><div class="success-check">✓</div><span class="eyebrow">Order received</span><h2>Thank you for shopping with us.</h2><p id="order-success-copy"></p><div class="success-order-number" id="success-order-number"></div><div class="success-actions"><a href="/track-order" class="button button-primary">Track order</a><a href="/" class="button button-outline">Back to home</a></div></section></div>
+{% endblock %}
+
+{% block scripts %}<script src="{{ url_for('static', path='/js/checkout.js') }}"></script>{% endblock %}

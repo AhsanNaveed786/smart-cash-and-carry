@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="hero-section container" aria-label="Featured promotions">
+    <div class="hero-slider" id="hero-slider">
+        <article class="hero-slide hero-fallback is-active">
+            <div class="hero-copy">
+                <span class="eyebrow light">Everyday essentials, beautifully simple</span>
+                <h1>Your neighborhood grocery store, now at your fingertips.</h1>
+                <p>Fresh prices for your selected branch, easy pickup and reliable home delivery.</p>
+                <a class="button button-accent" href="/shop">Start shopping <svg class="icon"><use href="#i-arrow"></use></svg></a>
+            </div>
+            <div class="hero-visual" aria-hidden="true"><div class="hero-orbit orbit-one"></div><div class="hero-orbit orbit-two"></div><span>🥬</span><span>🍎</span><span>🥛</span><span>🧴</span></div>
+        </article>
+    </div>
+    <div class="hero-dots" id="hero-dots"></div>
+</section>
+
+<section class="trust-strip container" aria-label="Shopping benefits">
+    <article><span class="trust-icon"><svg class="icon"><use href="#i-truck"></use></svg></span><div><strong>Free delivery</strong><small>On orders above Rs. 3,000</small></div></article>
+    <article><span class="trust-icon"><svg class="icon"><use href="#i-pin"></use></svg></span><div><strong>Branch-perfect prices</strong><small>Matched to your selected store</small></div></article>
+    <article><span class="trust-icon"><svg class="icon"><use href="#i-shield"></use></svg></span><div><strong>Carefully prepared</strong><small>Reliable pickup and delivery</small></div></article>
+</section>
+
+<section class="section container category-showcase">
+    <div class="section-heading"><div><span class="eyebrow">Browse quickly</span><h2>Shop by category</h2></div><a href="/shop">See all <svg class="icon"><use href="#i-arrow"></use></svg></a></div>
+    <div class="category-scroll no-scrollbar" id="category-scroll"><div class="skeleton category-skeleton"></div><div class="skeleton category-skeleton"></div><div class="skeleton category-skeleton"></div><div class="skeleton category-skeleton"></div></div>
+</section>
+
+<section class="section deals-section" id="deals-section" hidden>
+    <div class="container">
+        <div class="section-heading inverse"><div><span class="eyebrow light">Limited-time value</span><h2>Deals worth adding</h2></div><a href="/shop?deals=true">Explore deals <svg class="icon"><use href="#i-arrow"></use></svg></a></div>
+        <div class="product-carousel no-scrollbar" id="deals-carousel"></div>
+    </div>
+</section>
+
+<div id="category-product-sections" class="category-product-sections">
+    <section class="section container"><div class="section-heading"><div><span class="eyebrow">Loading fresh picks</span><h2>Preparing your store</h2></div></div><div class="product-carousel"><div class="skeleton product-skeleton"></div><div class="skeleton product-skeleton"></div><div class="skeleton product-skeleton"></div><div class="skeleton product-skeleton"></div></div></section>
+</div>
+
+<section class="container service-banner">
+    <div><span class="eyebrow light">Flexible ordering</span><h2>Delivery, pickup or WhatsApp—you choose.</h2><p>Your cart stays ready while you choose the most convenient way to order.</p></div>
+    <a href="/shop" class="button button-light">Build your basket</a>
+</section>
+{% endblock %}
+
+{% block scripts %}<script src="{{ url_for('static', path='/js/home.js') }}"></script>{% endblock %}

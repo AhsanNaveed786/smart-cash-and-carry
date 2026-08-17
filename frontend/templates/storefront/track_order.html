@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="tracking-hero"><div class="container tracking-hero-inner"><div><span class="eyebrow light">Stay informed</span><h1>Track your order</h1><p>Enter your order number and the same phone number used at checkout.</p></div><div class="tracking-art" aria-hidden="true"><svg class="icon"><use href="#i-truck"></use></svg></div></div></section>
+<section class="container tracking-shell">
+    <form class="tracking-form" id="tracking-form"><label><span>Order number</span><input id="tracking-order-number" required placeholder="SCC-20260817-AB12CD34"></label><label><span>Phone number</span><input id="tracking-phone" required minlength="7" maxlength="30" placeholder="03xx xxxxxxx"></label><button class="button button-primary" type="submit">Track order</button></form>
+    <div class="tracking-result" id="tracking-result" hidden></div>
+</section>
+{% endblock %}
+
+{% block scripts %}<script src="{{ url_for('static', path='/js/tracking.js') }}"></script>{% endblock %}

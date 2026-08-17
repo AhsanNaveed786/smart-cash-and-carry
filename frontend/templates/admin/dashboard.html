@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#063f34">
+    <title>Admin dashboard | SMART CASH & CARRY</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', path='/css/admin.css') }}">
+</head>
+<body class="admin-app-page">
+    <div class="admin-loading" id="admin-loading"><div class="admin-spinner"></div><strong>Opening your workspace…</strong></div>
+    <div class="admin-app" id="admin-app" hidden>
+        <aside class="admin-sidebar" id="admin-sidebar">
+            <a href="/" class="admin-brand"><span class="admin-brand-mark">S</span><span><strong>SMART</strong><small>CONTROL DESK</small></span></a>
+            <nav class="admin-nav" id="admin-nav">
+                <button class="active" data-section="overview"><span>⌂</span>Overview</button>
+                <button data-section="orders" data-permission="orders.read"><span>▣</span>Orders</button>
+                <button data-section="prices" data-permission="prices.read"><span>₨</span>Products & prices</button>
+                <button data-section="catalog" data-super-only><span>▦</span>Catalog & branches</button>
+                <button data-section="inventory" data-super-only><span>◫</span>Branch inventory</button>
+                <button data-section="imports" data-super-only><span>⇧</span>Excel imports</button>
+                <button data-section="content" data-super-only><span>✦</span>Store content</button>
+                <button data-section="discounts" data-super-only><span>%</span>Deals & discounts</button>
+                <button data-section="team" data-super-only><span>♙</span>Admins & sessions</button>
+                <button data-section="reports" data-super-only><span>↗</span>Revenue & exports</button>
+            </nav>
+            <div class="sidebar-footer"><a href="/" target="_blank">View storefront ↗</a><button type="button" id="admin-logout">Sign out</button></div>
+        </aside>
+
+        <main class="admin-main">
+            <header class="admin-topbar"><button class="menu-toggle" id="admin-menu-toggle">☰</button><div><small id="admin-date"></small><strong id="admin-page-title">Overview</strong></div><div class="admin-profile"><span class="admin-avatar" id="admin-avatar">A</span><span><strong id="admin-name">Admin</strong><small id="admin-role">Loading access…</small></span></div></header>
+            <div class="admin-content">
+                <section class="admin-section active" id="section-overview">
+                    <div class="page-heading"><div><span class="admin-eyebrow">At a glance</span><h1>Good day, <span id="welcome-name">Admin</span>.</h1><p>Here is what needs attention across your authorized branches.</p></div><button class="admin-button secondary" data-refresh-section="overview">Refresh</button></div>
+                    <div class="stat-grid" id="overview-stats"><article><span>Open orders</span><strong>—</strong><small>Loading live data</small></article><article><span>Completed today</span><strong>—</strong><small>Loading live data</small></article><article data-super-only><span>Today's revenue</span><strong>—</strong><small>Completed orders only</small></article><article><span>Assigned branches</span><strong>—</strong><small>Your access scope</small></article></div>
+                    <div class="dashboard-grid"><section class="admin-card"><div class="card-head"><div><h2>Recent orders</h2><p>Newest orders in your branch access.</p></div><button data-go-section="orders">View all</button></div><div id="overview-orders" class="table-wrap"></div></section><section class="admin-card"><div class="card-head"><div><h2>Quick actions</h2><p>Common daily tasks.</p></div></div><div class="quick-actions"><button data-go-section="orders" data-permission="orders.read"><span>▣</span><strong>Update an order</strong><small>Change fulfillment status</small></button><button data-go-section="prices" data-permission="prices.read"><span>₨</span><strong>Check branch prices</strong><small>Compare all assigned stores</small></button><button data-go-section="inventory" data-super-only><span>◫</span><strong>Update stock</strong><small>Mark availability quickly</small></button><button data-go-section="imports" data-super-only><span>⇧</span><strong>Import prices</strong><small>Preview before applying</small></button></div></section></div>
+                </section>
+
+                <section class="admin-section" id="section-orders">
+                    <div class="page-heading"><div><span class="admin-eyebrow">Fulfilment control</span><h1>Orders</h1><p>Filter by date and branch, update status and review permanent history.</p></div></div>
+                    <form class="toolbar-card" id="order-filters"><label>Branch<select name="branch_id" data-branch-select><option value="">All permitted branches</option></select></label><label>Status<select name="order_status"><option value="">All statuses</option><option>pending</option><option>confirmed</option><option>processing</option><option>ready_for_pickup</option><option>out_for_delivery</option><option>completed</option><option>cancelled</option></select></label><label>From<input type="date" name="created_from"></label><label>To<input type="date" name="created_to"></label><button class="admin-button primary" type="submit">Apply filters</button></form>
+                    <section class="admin-card"><div class="card-head"><div><h2>Order list</h2><p id="orders-count">Loading…</p></div></div><div id="orders-table" class="table-wrap"></div><div class="pagination" id="orders-pagination"></div></section>
+                </section>
+
+                <section class="admin-section" id="section-prices">
+                    <div class="page-heading"><div><span class="admin-eyebrow">Clear price control</span><h1>Products & branch prices</h1><p>See at a glance which products have the same or different prices.</p></div></div>
+                    <form class="toolbar-card" id="price-filters"><label class="grow">Search<input name="search" placeholder="Product name or barcode"></label><label class="check-label"><input type="checkbox" name="different_only">Different prices only</label><label class="check-label"><input type="checkbox" name="active_only" checked>Active products</label><button class="admin-button primary" type="submit">Search</button></form>
+                    <section class="admin-card"><div class="card-head"><div><h2>Price matrix</h2><p id="prices-count">Loading…</p></div></div><div id="prices-table" class="table-wrap wide-table"></div></section>
+                </section>
+
+                <section class="admin-section" id="section-catalog" data-super-only>
+                    <div class="page-heading"><div><span class="admin-eyebrow">Master data</span><h1>Catalog & branches</h1><p>Create products, categories and branches, then add their storefront images and options.</p></div><div class="heading-actions"><button class="admin-button secondary" id="new-branch">Add branch</button><button class="admin-button secondary" id="new-category">Add category</button><button class="admin-button primary" id="new-product">Add product</button></div></div>
+                    <div class="catalog-grid"><section class="admin-card"><div class="card-head"><div><h2>Categories</h2><p>Icons and homepage display.</p></div></div><div id="catalog-categories" class="content-card-list"></div></section><section class="admin-card"><div class="card-head"><div><h2>Branches</h2><p>Locations available to customers and admins.</p></div></div><div id="catalog-branches" class="content-card-list"></div></section></div>
+                    <section class="admin-card catalog-products"><div class="card-head"><div><h2>Products</h2><p id="catalog-products-count">Loading catalog…</p></div></div><div id="catalog-products" class="table-wrap"></div></section>
+                </section>
+
+                <section class="admin-section" id="section-inventory" data-super-only>
+                    <div class="page-heading"><div><span class="admin-eyebrow">Branch availability</span><h1>Inventory status</h1><p>Mark products in or out of stock for one branch.</p></div></div>
+                    <form class="toolbar-card" id="inventory-filters"><label>Branch<select name="branch_id" data-branch-select required></select></label><label>Status<select name="in_stock"><option value="">All products</option><option value="true">In stock</option><option value="false">Out of stock</option></select></label><button class="admin-button primary" type="submit">Load inventory</button></form>
+                    <section class="admin-card"><div class="card-head"><div><h2>Product availability</h2><p id="inventory-count">Select a branch</p></div></div><div id="inventory-table" class="table-wrap"></div></section>
+                </section>
+
+                <section class="admin-section" id="section-imports" data-super-only>
+                    <div class="page-heading"><div><span class="admin-eyebrow">Safe bulk updates</span><h1>Excel imports</h1><p>Every file is previewed before prices or products are changed.</p></div></div>
+                    <div class="three-card-grid">
+                        <form class="admin-card import-card" data-import-form="master"><span class="feature-icon">₨</span><h2>Master prices</h2><p>Excel columns: Barcode, Item Name, Price.</p><input type="file" name="excel_file" accept=".xlsx,.xls" required><button class="admin-button primary" type="submit">Upload & preview</button></form>
+                        <form class="admin-card import-card" data-import-form="branch"><span class="feature-icon">⌖</span><h2>Branch prices</h2><p>Apply overrides only to one selected branch.</p><select name="branch_id" data-branch-select required></select><input type="file" name="excel_file" accept=".xlsx,.xls" required><button class="admin-button primary" type="submit">Upload & preview</button></form>
+                        <form class="admin-card import-card" data-import-form="products"><span class="feature-icon">✦</span><h2>New products</h2><p>Upload products, then run AI categorization and confirm.</p><input type="file" name="excel_file" accept=".xlsx,.xls" required><button class="admin-button primary" type="submit">Upload & preview</button></form>
+                    </div>
+                    <section class="admin-card import-preview" id="import-preview"><div class="empty-panel">Upload a file to see its safe preview here.</div></section>
+                </section>
+
+                <section class="admin-section" id="section-content" data-super-only>
+                    <div class="page-heading"><div><span class="admin-eyebrow">Storefront editor</span><h1>Store content</h1><p>Update announcements and manage homepage banners.</p></div></div>
+                    <div class="dashboard-grid"><form class="admin-card admin-form" id="settings-form"><div class="card-head"><div><h2>Website settings</h2><p>Changes appear on the public storefront.</p></div></div><label>Store name<input name="store_name" required></label><label>Primary announcement<input name="announcement_primary" maxlength="300"></label><label>Secondary announcement<input name="announcement_secondary" maxlength="300"></label><label class="check-label"><input type="checkbox" name="announcement_is_active">Show announcement bar</label><label>Store logo (JPEG, PNG or WebP)<input type="file" id="website-logo-file" accept="image/jpeg,image/png,image/webp"></label><button class="admin-button primary" type="submit">Save settings</button></form><form class="admin-card admin-form" id="banner-form"><div class="card-head"><div><h2>Add homepage banner</h2><p>Create the text first, then upload its image.</p></div></div><label>Title<input name="title" required minlength="2"></label><label>Subtitle<input name="subtitle"></label><div class="form-row"><label>Button text<input name="button_text" placeholder="Shop now"></label><label>Button URL<input name="button_url" placeholder="/shop"></label></div><button class="admin-button primary" type="submit">Create banner</button></form></div>
+                    <section class="admin-card"><div class="card-head"><div><h2>Homepage banners</h2><p>Upload, activate or remove campaign visuals.</p></div></div><div id="banner-list" class="content-card-list"></div></section>
+                </section>
+
+                <section class="admin-section" id="section-discounts" data-super-only>
+                    <div class="page-heading"><div><span class="admin-eyebrow">Campaign pricing</span><h1>Deals & discounts</h1><p>Create timed offers and assign special prices by branch.</p></div><button class="admin-button primary" id="new-discount">New campaign</button></div>
+                    <section class="admin-card"><div id="discount-list" class="content-card-list"></div></section>
+                </section>
+
+                <section class="admin-section" id="section-team" data-super-only>
+                    <div class="page-heading"><div><span class="admin-eyebrow">Role-based control</span><h1>Admins & sessions</h1><p>Assign multiple branches, permissions and login windows to mini admins.</p></div><button class="admin-button primary" id="new-admin">Add mini admin</button></div>
+                    <section class="admin-card"><div id="admin-list" class="table-wrap"></div></section>
+                    <section class="admin-card"><div class="card-head"><div><h2>Security audit</h2><p>Recent access and session actions.</p></div></div><div id="audit-list" class="table-wrap"></div></section>
+                </section>
+
+                <section class="admin-section" id="section-reports" data-super-only>
+                    <div class="page-heading"><div><span class="admin-eyebrow">Protected financial view</span><h1>Revenue & exports</h1><p>Revenue includes completed orders and remains preserved after archival deletion.</p></div></div>
+                    <form class="toolbar-card" id="report-filters"><label>Branch<select name="branch_id" data-branch-select><option value="">All branches</option></select></label><label>From<input type="date" name="date_from"></label><label>To<input type="date" name="date_to"></label><button class="admin-button primary" type="submit">Update report</button></form>
+                    <div class="stat-grid report-stats"><article><span>Total revenue</span><strong id="report-revenue">—</strong><small>Completed sales</small></article><article><span>Completed orders</span><strong id="report-orders">—</strong><small>Inside selected dates</small></article><article><span>Average order</span><strong id="report-average">—</strong><small>Revenue ÷ orders</small></article></div>
+                    <div class="dashboard-grid"><section class="admin-card"><div class="card-head"><div><h2>Daily sales</h2><p>Permanent revenue history.</p></div></div><div id="revenue-chart" class="revenue-bars"></div></section><section class="admin-card"><div class="card-head"><div><h2>Excel exports</h2><p>Download records before deleting completed orders.</p></div></div><div class="export-actions"><button class="admin-button secondary" id="export-orders">Export filtered orders</button><button class="admin-button secondary" id="export-products">Export products & prices</button></div><div id="export-history" class="export-history"></div></section></div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <div class="admin-modal" id="admin-modal" aria-hidden="true"><div class="admin-modal-card"><button class="modal-close" data-close-modal>×</button><div id="admin-modal-content"></div></div></div>
+    <div class="admin-toast-stack" id="admin-toast-stack"></div>
+    <script src="{{ url_for('static', path='/js/api.js') }}"></script>
+    <script src="{{ url_for('static', path='/js/admin.js') }}"></script>
+</body>
+</html>
