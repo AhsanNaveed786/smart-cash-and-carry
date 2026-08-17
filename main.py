@@ -7,13 +7,18 @@ from sqlalchemy.orm import Session
 from routers.availability_router import (
     router as availability_router,
 )
+from routers.admin_business_router import router as admin_business_router
 from routers.storefront_content_router import (
     router as storefront_content_router,
+)
+from routers.variant_router import (
+    router as variant_router,
 )
 from database import Base, engine, get_db
 from routers.admin_auth_router import (
     router as admin_auth_router,
 )
+from routers.rbac_router import router as rbac_router
 from routers.branch_router import router as branch_router
 from routers.category_router import router as category_router
 from routers.price_import_router import (
@@ -22,6 +27,16 @@ from routers.price_import_router import (
 from fastapi.staticfiles import StaticFiles
 from routers.category_media_router import (
     router as category_media_router,
+)
+from routers.order_router import router as order_router
+from routers.product_gallery_router import (
+    router as product_gallery_router,
+)
+from routers.variant_stock_router import (
+    router as variant_stock_router,
+)
+from routers.whatsapp_order_router import (
+    router as whatsapp_order_router,
 )
 from routers.content_router import router as content_router
 from services.media_service import (
@@ -90,9 +105,15 @@ app.include_router(product_import_router)
 app.include_router(availability_router)
 app.include_router(storefront_content_router)
 app.include_router(content_router)
+app.include_router(admin_business_router)
 app.include_router(category_router)
+app.include_router(product_gallery_router)
 app.include_router(category_media_router)
-
+app.include_router(variant_router)
+app.include_router(variant_stock_router)
+app.include_router(order_router)
+app.include_router(rbac_router)
+app.include_router(whatsapp_order_router)
 @app.get("/")
 def root():
     return {

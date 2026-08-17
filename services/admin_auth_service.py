@@ -18,6 +18,7 @@ from database import get_db
 from models import Admin, AdminSession
 from schemas import AdminLoginRequest
 from services.password_service import verify_password
+from services.rbac_service import validate_admin_login_policy
 
 
 SESSION_COOKIE_NAME = "smart_admin_session"
@@ -154,7 +155,6 @@ def login_admin(
 
     if (
         admin is None
-        or not admin.is_active
         or not verify_password(
             login_data.password,
             admin.password_hash,
@@ -164,6 +164,8 @@ def login_admin(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password.",
         )
+
+    validate_admin_login_policy(admin)
 
     session_token = create_random_token()
     csrf_token = create_random_token()
@@ -189,6 +191,8 @@ def login_admin(
         expires_at=expires_at,
         last_used_at=current_time,
         revoked_at=None,
+        revoked_by_admin_id=None,
+        revoke_reason=None,
     )
 
     admin.last_login_at = current_time
@@ -256,16 +260,30 @@ def require_admin_session(
         raw_session_token=raw_session_token,
     )
 
-    if (
-        admin_session is None
-        or not admin_session.admin.is_active
-    ):
+    if admin_session is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=(
                 "Admin session is invalid or expired."
             ),
         )
+
+    try:
+        validate_admin_login_policy(admin_session.admin)
+    except HTTPException as error:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Admin access is disabled or outside its login window.",
+        ) from error
+
+    current_time = datetime.now(timezone.utc)
+    if (
+        admin_session.last_used_at is None
+        or current_time - admin_session.last_used_at
+        >= timedelta(minutes=5)
+    ):
+        admin_session.last_used_at = current_time
+        db.commit()
 
     return admin_session
 
@@ -332,6 +350,8 @@ def logout_admin(
     current_time = datetime.now(timezone.utc)
 
     admin_session.revoked_at = current_time
+    admin_session.revoked_by_admin_id = admin_session.admin_id
+    admin_session.revoke_reason = "Admin logged out."
     admin_session.last_used_at = current_time
 
     db.commit()
