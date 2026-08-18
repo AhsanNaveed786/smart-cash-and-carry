@@ -95,7 +95,7 @@
                     </div>
                     <div class="product-card-actions">
                         <a href="/product/${Number(id)}">View details</a>
-                        <button class="quick-add" type="button" data-quick-add="${Number(id)}" aria-label="Add ${API.escapeHtml(product.name)} to cart"><svg class="icon"><use href="#i-plus"></use></svg></button>
+                        <button class="quick-add" type="button" data-quick-add="${Number(id)}" aria-label="Add ${API.escapeHtml(product.name)} to cart"><svg class="icon"><use href="#i-plus"></use></svg><span>Add to cart</span></button>
                     </div>
                 </div>
             </article>`;

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" dir="ltr">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -8,8 +8,15 @@
     <title>{{ page_title }} | SMART CASH & CARRY</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('static', path='/css/site.css') }}?v=20260818-3">
+    <script>
+        (function () {
+            var language = localStorage.getItem("smart_language") === "ur" ? "ur" : "en";
+            document.documentElement.lang = language;
+            document.documentElement.dir = language === "ur" ? "rtl" : "ltr";
+        }());
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@600;700;800&family=Noto+Nastaliq+Urdu:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', path='/css/site.css') }}?v=20260818-6">
     {% block head %}{% endblock %}
 </head>
 <body class="page-{{ page_name }}">
@@ -29,6 +36,7 @@
         <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
         <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3m3 0-1 14H7L6 7m4 4v6m4-6v6"/></symbol>
         <symbol id="i-whatsapp" viewBox="0 0 24 24"><path d="M20.5 11.7a8.5 8.5 0 0 1-12.6 7.5L3 20.5l1.3-4.7A8.5 8.5 0 1 1 20.5 11.7Z"/><path d="M8.3 7.8c.3-.5.6-.5.9-.5h.5l1 2.2c.1.3 0 .5-.2.8l-.7.8c.8 1.7 2 2.9 3.7 3.7l.8-1c.2-.3.5-.3.8-.2l2.2 1c.3.1.4.4.4.7-.1 1.2-1 2.1-2.2 2.3-1.8.3-4.5-1-6.7-3.1-2.1-2.1-3.4-4.9-3.1-6.7.2-1 .9-1.8 1.8-2Z"/></symbol>
+        <symbol id="i-language" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.4 2.5 3.6 5.5 3.6 9S14.4 18.5 12 21M12 3C9.6 5.5 8.4 8.5 8.4 12S9.6 18.5 12 21"/></symbol>
     </svg>
 
     <div class="announcement-bar" id="announcement-bar">
@@ -64,6 +72,10 @@
             </form>
 
             <nav class="header-actions" aria-label="Quick links">
+                <button class="header-action language-action" id="language-toggle" type="button" aria-label="Switch website language" aria-pressed="false" data-no-translate>
+                    <svg class="icon"><use href="#i-language"></use></svg>
+                    <span id="language-toggle-label">اردو</span>
+                </button>
                 <a href="/track-order" class="header-action"><svg class="icon"><use href="#i-clock"></use></svg><span>Track</span></a>
                 <a href="/admin/login" class="header-action"><svg class="icon"><use href="#i-user"></use></svg><span>Admin</span></a>
                 <a href="/cart" class="header-action cart-action"><svg class="icon"><use href="#i-cart"></use></svg><span>Cart</span><b class="cart-count" data-cart-count>0</b></a>
@@ -113,7 +125,8 @@
 
     <div class="toast-stack" id="toast-stack" aria-live="polite"></div>
     <script src="{{ url_for('static', path='/js/api.js') }}?v=20260818-2"></script>
-    <script src="{{ url_for('static', path='/js/store.js') }}?v=20260818-3"></script>
+    <script src="{{ url_for('static', path='/js/i18n.js') }}?v=20260818-1"></script>
+    <script src="{{ url_for('static', path='/js/store.js') }}?v=20260818-5"></script>
     {% block scripts %}{% endblock %}
 </body>
 </html>
