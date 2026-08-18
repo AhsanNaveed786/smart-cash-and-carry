@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import HTTPException, UploadFile, status
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import Session
 
 from models import (
@@ -140,6 +140,37 @@ def update_product_import_row_selection(
     for import_row in rows:
         import_row.apply_selected = apply_selected
 
+    db.commit()
+
+    return get_product_import_review_summary(db, batch_id)
+
+
+def update_all_product_import_row_selection(
+    db: Session,
+    batch_id: int,
+    apply_selected: bool,
+) -> dict[str, Any]:
+    batch = get_product_import_batch(db, batch_id)
+
+    if batch.status in {"applied", "cancelled", "failed"}:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This product import can no longer be edited.",
+        )
+
+    # One database update handles the complete import, including batches
+    # containing tens of thousands of rows. Invalid, duplicate and already
+    # existing rows are intentionally left unchanged.
+    db.execute(
+        update(ProductImportRow)
+        .where(
+            ProductImportRow.batch_id == batch_id,
+            ProductImportRow.status.in_(
+                {"pending_category", "ready"}
+            ),
+        )
+        .values(apply_selected=apply_selected)
+    )
     db.commit()
 
     return get_product_import_review_summary(db, batch_id)

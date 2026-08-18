@@ -412,15 +412,21 @@
             target.innerHTML = await productImportMarkup(result.id, false);
         } else {
             state.activeImport = { type, priceBatchId: result.id, productBatchId: result.product_import_batch_id || null };
-            const priceMarkup = `<div class="card-head"><div><h2>${type === "master" ? "Master" : "Branch"} price preview #${result.id}</h2><p>Item codes are matched to listed products. Unchanged prices remain untouched.</p></div></div><div class="preview-summary"><span>${result.total_rows.toLocaleString()} checked</span><span>${result.changed_rows.toLocaleString()} changed</span><span>${result.unchanged_rows.toLocaleString()} unchanged</span>${type === "master" ? `<span>${Number(result.new_product_rows || 0).toLocaleString()} new products</span>` : ""}<span>${result.invalid_rows.toLocaleString()} invalid</span></div>${priceImportRowsTable(result.rows || [], result.id)}`;
+            const priceIsEditable = result.status === "preview";
+            const priceButton = priceIsEditable
+                ? type === "master"
+                    ? `<button class="admin-button primary" data-master-price-apply="${result.id}">Confirm master price changes only</button>`
+                    : `<button class="admin-button primary" data-price-apply="branch:${result.id}">Confirm selected branch prices</button>`
+                : `<span class="import-complete-note">✓ Price changes have been applied.</span>`;
+            const priceDescription = type === "master"
+                ? "Only matched products are handled here. New products shown below are not created by this button."
+                : "Only matched products for the selected branch are handled here. Unchanged prices remain untouched.";
+            const priceMarkup = `<section class="import-workflow-section"><div class="card-head"><div><span class="admin-eyebrow">Step 1 · Prices only</span><h2>${type === "master" ? "Master" : "Branch"} price preview #${result.id}</h2><p>${priceDescription}</p></div>${statusPill(result.status)}</div><div class="preview-summary"><span>${result.total_rows.toLocaleString()} checked</span><span>${result.changed_rows.toLocaleString()} changed</span><span>${result.unchanged_rows.toLocaleString()} unchanged</span>${type === "master" ? `<span>${Number(result.new_product_rows || 0).toLocaleString()} new products</span>` : ""}<span>${result.invalid_rows.toLocaleString()} invalid</span></div>${priceImportRowsTable(result.rows || [], result.id)}<div class="import-action-bar"><div><strong>Apply price updates</strong><small>This action does not create any new product.</small></div><div class="table-actions">${priceButton}</div></div></section>`;
             let productMarkup = "";
             if (type === "master" && result.product_import_batch_id) {
-                productMarkup = `<hr>${await productImportMarkup(result.product_import_batch_id, true)}`;
+                productMarkup = await productImportMarkup(result.product_import_batch_id, true);
             }
-            const finalButton = type === "master"
-                ? `<button class="admin-button primary" data-master-confirm-all="${result.id}">Confirm selected prices & products</button>`
-                : `<button class="admin-button primary" data-price-apply="branch:${result.id}">Confirm selected prices</button>`;
-            target.innerHTML = `${priceMarkup}${productMarkup}<div class="table-actions">${finalButton}</div>`;
+            target.innerHTML = `${priceMarkup}${productMarkup}`;
         }
     }
 
@@ -447,12 +453,16 @@
             API.get(`/api/product-imports/${batchId}/summary`),
             API.get(`/api/product-imports/${batchId}/rows?skip=${state.importProductSkip}&limit=${state.importPageSize}`),
         ]);
-        const table = rows.items.length ? `<div class="table-wrap"><table class="admin-table"><thead><tr><th>Upload</th><th>Row</th><th>Item code</th><th>Product</th><th>Price</th><th>AI / reviewed category</th><th>Status</th></tr></thead><tbody>${rows.items.map((row) => `<tr><td>${["pending_category", "ready"].includes(row.status) ? `<input class="import-row-check" type="checkbox" data-product-import-select="${batchId}:${row.id}" ${row.apply_selected ? "checked" : ""}>` : "—"}</td><td>${row.excel_row_number}</td><td>${esc(row.barcode || "—")}</td><td><strong>${esc(row.item_name || "—")}</strong>${row.ai_reason ? `<small>${esc(row.ai_reason)}</small>` : ""}</td><td>${row.uploaded_price === null ? "—" : API.formatMoney(row.uploaded_price)}</td><td>${["pending_category", "ready"].includes(row.status) ? categoryReviewControl(batchId, row) : "—"}</td><td>${row.suggested_category_name ? `<span class="new-category-pill">New: ${esc(row.suggested_category_name)}</span>` : statusPill(row.status)}</td></tr>`).join("")}</tbody></table></div>` : empty("No rows on this page.");
+        const isEditable = !["applied", "cancelled", "failed"].includes(batch.status);
+        const table = rows.items.length ? `<div class="table-wrap"><table class="admin-table"><thead><tr><th>Upload</th><th>Row</th><th>Item code</th><th>Product</th><th>Price</th><th>AI / reviewed category</th><th>Status</th></tr></thead><tbody>${rows.items.map((row) => `<tr><td>${isEditable && ["pending_category", "ready"].includes(row.status) ? `<input class="import-row-check" type="checkbox" data-product-import-select="${batchId}:${row.id}" ${row.apply_selected ? "checked" : ""}>` : "—"}</td><td>${row.excel_row_number}</td><td>${esc(row.barcode || "—")}</td><td><strong>${esc(row.item_name || "—")}</strong>${row.ai_reason ? `<small>${esc(row.ai_reason)}</small>` : ""}</td><td>${row.uploaded_price === null ? "—" : API.formatMoney(row.uploaded_price)}</td><td>${isEditable && ["pending_category", "ready"].includes(row.status) ? categoryReviewControl(batchId, row) : "—"}</td><td>${row.suggested_category_name ? `<span class="new-category-pill">New: ${esc(row.suggested_category_name)}</span>` : statusPill(row.status)}</td></tr>`).join("")}</tbody></table></div>` : empty("No rows on this page.");
         const from = rows.total ? rows.skip + 1 : 0;
         const to = Math.min(rows.skip + rows.limit, rows.total);
         const pager = `<div class="pagination"><button data-import-page="previous" ${rows.skip === 0 ? "disabled" : ""}>Previous</button><span>${from.toLocaleString()}–${to.toLocaleString()} of ${rows.total.toLocaleString()}</span><button data-import-page="next" ${to >= rows.total ? "disabled" : ""}>Next</button></div>`;
-        const finalButton = embedded ? "" : `<button class="admin-button primary" data-product-apply="${batchId}">Confirm & create selected products</button>`;
-        return `<div class="card-head"><div><h2>${embedded ? "New products found in master file" : `Product import #${batch.id}`}</h2><p>Choose products, run AI, review existing or proposed new categories, then confirm once.</p></div></div><div class="preview-summary"><span>${summary.total_rows.toLocaleString()} total</span><span>${summary.selected_rows.toLocaleString()} selected</span><span>${summary.categorized_rows.toLocaleString()} checked</span><span>${summary.pending_rows.toLocaleString()} remaining</span><span>${summary.existing_category_rows.toLocaleString()} existing category</span><span>${summary.new_category_rows.toLocaleString()} new category</span><span>${summary.invalid_rows.toLocaleString()} invalid</span></div><div class="import-progress"><span style="width:${Math.max(0, Math.min(100, summary.progress_percentage))}%"></span></div>${summary.new_category_rows ? `<p class="import-review-note">Groq proposed ${summary.new_category_rows} new category assignment(s). Review them below; categories are created only after final confirmation.</p>` : ""}${table}${pager}<div class="table-actions"><button data-product-ai="${batchId}">Categorize next selected rows</button><button data-product-confirm="${batchId}">Accept reviewed AI suggestions</button>${finalButton}</div>`;
+        const bulkSelection = isEditable ? `<div class="import-bulk-controls"><div><strong>Choose products from the complete file</strong><small>These buttons affect all ${summary.total_rows.toLocaleString()} reviewable rows, not only the current page.</small></div><div class="table-actions"><button data-product-bulk-selection="${batchId}:true">Check all</button><button data-product-bulk-selection="${batchId}:false">Uncheck all</button></div></div>` : "";
+        const productActions = isEditable
+            ? `<div class="import-action-bar"><div><strong>Create selected new products</strong><small>${embedded ? "This is separate from the master-price confirmation above." : "Only checked and reviewed products will be created."}</small></div><div class="table-actions"><button data-product-ai="${batchId}">Categorize next selected rows</button><button data-product-confirm="${batchId}">Accept reviewed AI suggestions</button><button class="admin-button primary" data-product-apply="${batchId}">Confirm selected new products only</button></div></div>`
+            : `<div class="import-action-bar"><span class="import-complete-note">✓ This product list has been processed.</span></div>`;
+        return `<section class="import-workflow-section"><div class="card-head"><div><span class="admin-eyebrow">${embedded ? "Step 2 · New products only" : "Product review"}</span><h2>${embedded ? "New products found in master file" : `Product import #${batch.id}`}</h2><p>Choose products, run AI, review existing or proposed new categories, then confirm this list separately.</p></div>${statusPill(batch.status)}</div><div class="preview-summary"><span>${summary.total_rows.toLocaleString()} total</span><span>${summary.selected_rows.toLocaleString()} selected</span><span>${summary.categorized_rows.toLocaleString()} checked</span><span>${summary.pending_rows.toLocaleString()} remaining</span><span>${summary.existing_category_rows.toLocaleString()} existing category</span><span>${summary.new_category_rows.toLocaleString()} new category</span><span>${summary.invalid_rows.toLocaleString()} invalid</span></div><div class="import-progress"><span style="width:${Math.max(0, Math.min(100, summary.progress_percentage))}%"></span></div>${bulkSelection}${summary.new_category_rows ? `<p class="import-review-note">Groq proposed ${summary.new_category_rows} new category assignment(s). Review them below; categories are created only after final confirmation.</p>` : ""}${table}${pager}${productActions}</section>`;
     }
 
     async function refreshActiveImport() {
@@ -656,10 +666,65 @@
         const stock = event.target.closest("[data-stock-toggle]"); if (stock) { const [productId, branchId, value] = stock.dataset.stockToggle.split(":"); try { await API.put(`/api/availability/${productId}/${branchId}`, { is_in_stock: value === "true", stock_message: value === "true" ? null : "Temporarily out of stock" }); toast("Availability updated."); await loadInventory(); } catch (error) { toast(error.message, "error"); } return; }
         const stockReset = event.target.closest("[data-stock-reset]"); if (stockReset) { const [productId, branchId] = stockReset.dataset.stockReset.split(":"); try { await API.delete(`/api/availability/${productId}/${branchId}`); toast("Default availability restored."); await loadInventory(); } catch (error) { toast(error.message, "error"); } return; }
         const priceApply = event.target.closest("[data-price-apply]"); if (priceApply) { const [type, batchId] = priceApply.dataset.priceApply.split(":"); try { const result = await API.post(`/api/price-imports/branch/${batchId}/apply`, { confirm: true }); await renderImportPreview(type, result); toast("Selected prices applied."); } catch (error) { toast(error.message, "error"); } return; }
-        const masterConfirm = event.target.closest("[data-master-confirm-all]"); if (masterConfirm && confirm("Apply all selected price updates, create reviewed products and approved new categories?")) { try { const result = await API.post(`/api/price-imports/master/${masterConfirm.dataset.masterConfirmAll}/confirm-all`, { confirm: true }); document.getElementById("import-preview").innerHTML = `<div class="empty-panel"><strong>Import completed.</strong><br>${result.updated_prices.toLocaleString()} prices updated, ${result.unchanged_prices.toLocaleString()} unchanged, ${result.created_products.toLocaleString()} products and ${result.created_categories.length.toLocaleString()} categories created.</div>`; toast("Master import completed."); } catch (error) { toast(error.message, "error"); } return; }
+        const masterPriceApply = event.target.closest("[data-master-price-apply]");
+        if (masterPriceApply) {
+            if (!confirm("Apply only the selected master-price changes? New products will not be created.")) return;
+            try {
+                const result = await API.post(
+                    `/api/price-imports/master/${masterPriceApply.dataset.masterPriceApply}/apply`,
+                    { confirm: true },
+                );
+                await renderImportPreview("master", result);
+                toast("Master-price changes applied. New products were not created.");
+            } catch (error) {
+                toast(error.message, "error");
+            }
+            return;
+        }
+        const productBulkSelection = event.target.closest("[data-product-bulk-selection]");
+        if (productBulkSelection) {
+            const [batchId, rawSelection] = productBulkSelection.dataset.productBulkSelection.split(":");
+            const applySelected = rawSelection === "true";
+            productBulkSelection.disabled = true;
+            try {
+                const summary = await API.patch(
+                    `/api/product-imports/${batchId}/rows/selection-all`,
+                    { apply_selected: applySelected },
+                );
+                await refreshActiveImport();
+                toast(
+                    applySelected
+                        ? `All reviewable products checked (${summary.selected_rows.toLocaleString()} selected).`
+                        : "All new products unchecked. No new product will be created unless selected again.",
+                );
+            } catch (error) {
+                toast(error.message, "error");
+            } finally {
+                productBulkSelection.disabled = false;
+            }
+            return;
+        }
         const productAi = event.target.closest("[data-product-ai]"); if (productAi) { try { await API.post(`/api/product-imports/${productAi.dataset.productAi}/categorize-ai?limit=100`, {}); await refreshActiveImport(); toast("Next selected products categorized."); } catch (error) { toast(error.message, "error"); } return; }
         const productConfirm = event.target.closest("[data-product-confirm]"); if (productConfirm) { try { await API.post(`/api/product-imports/${productConfirm.dataset.productConfirm}/confirm-ai`, { confirm: true }); await refreshActiveImport(); toast("AI suggestions accepted for selected rows."); } catch (error) { toast(error.message, "error"); } return; }
-        const productApply = event.target.closest("[data-product-apply]"); if (productApply && confirm("Create only the selected, reviewed products now?")) { try { const result = await API.post(`/api/product-imports/${productApply.dataset.productApply}/apply`, { confirm: true }); document.getElementById("import-preview").innerHTML = `<div class="empty-panel"><strong>${result.created_products.toLocaleString()} products created.</strong><br>${result.created_categories.length.toLocaleString()} categories created and ${result.skipped_rows.toLocaleString()} row(s) skipped.</div>`; toast("Product import applied."); } catch (error) { toast(error.message, "error"); } return; }
+        const productApply = event.target.closest("[data-product-apply]");
+        if (productApply) {
+            if (!confirm("Create only the selected and reviewed new products? Master prices are handled separately.")) return;
+            try {
+                const result = await API.post(
+                    `/api/product-imports/${productApply.dataset.productApply}/apply`,
+                    { confirm: true },
+                );
+                if (state.activeImport?.type === "master") {
+                    await refreshActiveImport();
+                } else {
+                    document.getElementById("import-preview").innerHTML = `<div class="empty-panel"><strong>${result.created_products.toLocaleString()} products created.</strong><br>${result.created_categories.length.toLocaleString()} categories created and ${result.skipped_rows.toLocaleString()} row(s) skipped.</div>`;
+                }
+                toast(`${result.created_products.toLocaleString()} selected new product(s) created.`);
+            } catch (error) {
+                toast(error.message, "error");
+            }
+            return;
+        }
         const useCategory = event.target.closest("[data-use-import-category]"); if (useCategory) { const [batchId, rowId] = useCategory.dataset.useImportCategory.split(":"); const selectElement = document.querySelector(`[data-import-category="${batchId}:${rowId}"]`); const value = selectElement?.value || ""; if (!value) { toast("Choose a category first.", "error"); return; } const isNew = value.startsWith("new:"); try { await API.patch(`/api/product-imports/${batchId}/rows/${rowId}/category`, { confirmed_category_id: isNew ? null : Number(value.split(":")[1]), confirmed_category_name: isNew ? value.slice(4) : null, apply_selected: true }); await refreshActiveImport(); toast("Category reviewed."); } catch (error) { toast(error.message, "error"); } return; }
         const importPage = event.target.closest("[data-import-page]"); if (importPage && !importPage.disabled) { state.importProductSkip = Math.max(0, state.importProductSkip + (importPage.dataset.importPage === "next" ? state.importPageSize : -state.importPageSize)); await refreshActiveImport(); return; }
         if (event.target.closest("#new-discount")) return openDiscountForm();

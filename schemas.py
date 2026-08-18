@@ -483,6 +483,10 @@ class ImportRowSelectionUpdate(SchemaBase):
     )
     apply_selected: bool
 
+
+class BulkImportSelectionUpdate(SchemaBase):
+    apply_selected: bool
+
 class ProductImportRowResponse(SchemaBase):
     id: int
     batch_id: int

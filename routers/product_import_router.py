@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from database import get_db
 from dependencies.admin_access import permission_required
 from schemas import (
+    BulkImportSelectionUpdate,
     ImportRowSelectionUpdate,
     ProductCategorizationRunResponse,
     ProductImportApplyRequest,
@@ -38,6 +39,7 @@ from services.product_import_service import (
     get_product_import_rows,
     get_product_import_review_summary,
     update_product_import_row_selection,
+    update_all_product_import_row_selection,
 )
 
 
@@ -193,5 +195,21 @@ def change_product_row_selection(
         db=db,
         batch_id=batch_id,
         row_ids=selection.row_ids,
+        apply_selected=selection.apply_selected,
+    )
+
+
+@router.patch(
+    "/{batch_id}/rows/selection-all",
+    response_model=ProductImportReviewSummary,
+)
+def change_all_product_rows_selection(
+    batch_id: int,
+    selection: BulkImportSelectionUpdate,
+    db: Session = Depends(get_db),
+):
+    return update_all_product_import_row_selection(
+        db=db,
+        batch_id=batch_id,
         apply_selected=selection.apply_selected,
     )
