@@ -327,7 +327,7 @@
         target.innerHTML = state.branches.map((branch) => `
             <button type="button" data-branch-id="${branch.id}" class="branch-choice ${state.branch?.id === branch.id ? "selected" : ""}">
                 <span class="branch-choice-icon"><svg class="icon"><use href="#i-pin"></use></svg></span>
-                <span><strong>${API.escapeHtml(branch.name)}</strong><small>Branch code: ${API.escapeHtml(branch.code)}</small></span>
+                <strong class="branch-choice-name">${API.escapeHtml(branch.name)}</strong>
                 <svg class="icon choice-chevron"><use href="#i-chevron"></use></svg>
             </button>`).join("");
     }
