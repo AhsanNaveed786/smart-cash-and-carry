@@ -2,7 +2,14 @@ from fastapi import APIRouter, Depends, File, UploadFile
 from sqlalchemy.orm import Session
 
 from database import get_db
+from dependencies.admin_access import (
+    permission_required,
+    require_selected_branch_access,
+)
+from models import Admin, PriceImportBatch
 from schemas import (
+    ImportRowSelectionUpdate,
+    MasterImportConfirmResponse,
     PriceImportApplyRequest,
     PriceImportPreviewResponse,
 )
@@ -12,12 +19,19 @@ from services.excel_price_service import (
     create_branch_price_preview,
     create_master_price_preview,
     get_price_import_preview,
+    update_price_import_row_selection,
+)
+from services.import_workflow_service import (
+    confirm_master_import_workflow,
 )
 
 
 router = APIRouter(
     prefix="/api/price-imports",
     tags=["Excel Price Imports"],
+    dependencies=[
+        Depends(permission_required("imports.manage"))
+    ],
 )
 
 
@@ -57,6 +71,7 @@ def confirm_master_price_import(
 async def upload_branch_price_preview(
     branch_id: int,
     excel_file: UploadFile = File(...),
+    _admin: Admin = Depends(require_selected_branch_access),
     db: Session = Depends(get_db),
 ):
     return await create_branch_price_preview(
@@ -73,8 +88,16 @@ async def upload_branch_price_preview(
 def confirm_branch_price_import(
     batch_id: int,
     confirmation: PriceImportApplyRequest,
+    admin: Admin = Depends(
+        permission_required("imports.manage")
+    ),
     db: Session = Depends(get_db),
 ):
+    batch = db.get(PriceImportBatch, batch_id)
+    if batch and batch.branch_id is not None:
+        from services.rbac_service import ensure_admin_branch_access
+
+        ensure_admin_branch_access(db, admin, batch.branch_id)
     return apply_branch_price_import(
         db=db,
         batch_id=batch_id,
@@ -92,4 +115,36 @@ def view_price_import_preview(
     return get_price_import_preview(
         db=db,
         batch_id=batch_id,
+    )
+
+
+@router.post(
+    "/master/{batch_id}/confirm-all",
+    response_model=MasterImportConfirmResponse,
+)
+def confirm_all_master_import_changes(
+    batch_id: int,
+    confirmation: PriceImportApplyRequest,
+    db: Session = Depends(get_db),
+):
+    return confirm_master_import_workflow(
+        db=db,
+        batch_id=batch_id,
+    )
+
+
+@router.patch(
+    "/{batch_id}/rows/selection",
+    response_model=PriceImportPreviewResponse,
+)
+def change_price_row_selection(
+    batch_id: int,
+    selection: ImportRowSelectionUpdate,
+    db: Session = Depends(get_db),
+):
+    return update_price_import_row_selection(
+        db=db,
+        batch_id=batch_id,
+        row_ids=selection.row_ids,
+        apply_selected=selection.apply_selected,
     )

@@ -18,6 +18,9 @@
         catalogLimit: 100,
         selectedProductIds: new Set(),
         lastExportId: null,
+        importProductSkip: 0,
+        importPageSize: 100,
+        activeImport: null,
     };
 
     const titles = {
@@ -382,6 +385,7 @@
 
     async function uploadImport(form) {
         const type = form.dataset.importForm;
+        state.importProductSkip = 0;
         const data = new FormData();
         const file = form.querySelector('[name="excel_file"]').files[0];
         if (!file) return;
@@ -404,16 +408,62 @@
     async function renderImportPreview(type, result) {
         const target = document.getElementById("import-preview");
         if (type === "products") {
-            const rows = await API.get(`/api/product-imports/${result.id}/rows?skip=0&limit=100`);
-            target.innerHTML = `<div class="card-head"><div><h2>Product import #${result.id}</h2><p>Review, categorize and confirm before creation.</p></div></div><div class="preview-summary"><span>${result.total_rows} total</span><span>${result.valid_rows} valid</span><span>${result.invalid_rows} invalid</span><span>${result.categorized_rows} categorized</span></div>${importRowsTable(rows.items)}<div class="table-actions"><button data-product-ai="${result.id}">Run AI categorization</button><button data-product-confirm="${result.id}">Confirm AI suggestions</button><button data-product-apply="${result.id}">Create confirmed products</button></div>`;
+            state.activeImport = { type, productBatchId: result.id, priceBatchId: null };
+            target.innerHTML = await productImportMarkup(result.id, false);
         } else {
-            target.innerHTML = `<div class="card-head"><div><h2>${type === "master" ? "Master" : "Branch"} price preview #${result.id}</h2><p>Only changed rows will be applied.</p></div></div><div class="preview-summary"><span>${result.total_rows} total</span><span>${result.changed_rows} changed</span><span>${result.unchanged_rows} unchanged</span><span>${result.invalid_rows} invalid</span></div>${importRowsTable(result.rows || [])}<button class="admin-button primary" data-price-apply="${type}:${result.id}">Confirm and apply changes</button>`;
+            state.activeImport = { type, priceBatchId: result.id, productBatchId: result.product_import_batch_id || null };
+            const priceMarkup = `<div class="card-head"><div><h2>${type === "master" ? "Master" : "Branch"} price preview #${result.id}</h2><p>Item codes are matched to listed products. Unchanged prices remain untouched.</p></div></div><div class="preview-summary"><span>${result.total_rows.toLocaleString()} checked</span><span>${result.changed_rows.toLocaleString()} changed</span><span>${result.unchanged_rows.toLocaleString()} unchanged</span>${type === "master" ? `<span>${Number(result.new_product_rows || 0).toLocaleString()} new products</span>` : ""}<span>${result.invalid_rows.toLocaleString()} invalid</span></div>${priceImportRowsTable(result.rows || [], result.id)}`;
+            let productMarkup = "";
+            if (type === "master" && result.product_import_batch_id) {
+                productMarkup = `<hr>${await productImportMarkup(result.product_import_batch_id, true)}`;
+            }
+            const finalButton = type === "master"
+                ? `<button class="admin-button primary" data-master-confirm-all="${result.id}">Confirm selected prices & products</button>`
+                : `<button class="admin-button primary" data-price-apply="branch:${result.id}">Confirm selected prices</button>`;
+            target.innerHTML = `${priceMarkup}${productMarkup}<div class="table-actions">${finalButton}</div>`;
         }
     }
 
-    function importRowsTable(rows) {
-        if (!rows?.length) return empty("No preview rows available.");
-        return `<div class="table-wrap"><table class="admin-table"><thead><tr><th>Row</th><th>Barcode</th><th>Item</th><th>Price</th><th>Status</th></tr></thead><tbody>${rows.slice(0, 100).map((row) => `<tr><td>${row.excel_row_number}</td><td>${esc(row.barcode || "—")}</td><td>${esc(row.item_name || "—")}</td><td>${row.uploaded_price !== undefined && row.uploaded_price !== null ? API.formatMoney(row.uploaded_price) : "—"}</td><td>${statusPill(row.status)}</td></tr>`).join("")}</tbody></table></div>`;
+    function priceImportRowsTable(rows, batchId) {
+        if (!rows?.length) return empty("No changed or invalid preview rows.");
+        return `<div class="table-wrap"><table class="admin-table"><thead><tr><th>Use</th><th>Row</th><th>Item code</th><th>Item</th><th>Old price</th><th>New price</th><th>Status</th></tr></thead><tbody>${rows.map((row) => `<tr><td>${row.status === "changed" ? `<input class="import-row-check" type="checkbox" data-price-import-select="${batchId}:${row.id}" ${row.apply_selected ? "checked" : ""}>` : "—"}</td><td>${row.excel_row_number}</td><td>${esc(row.barcode || "—")}</td><td>${esc(row.item_name || "—")}</td><td>${row.current_price === null ? "—" : API.formatMoney(row.current_price)}</td><td>${row.uploaded_price === null ? "—" : API.formatMoney(row.uploaded_price)}</td><td>${statusPill(row.status)}</td></tr>`).join("")}</tbody></table></div>`;
+    }
+
+    function categoryReviewControl(batchId, row) {
+        const selectedId = row.confirmed_category_id || row.suggested_category_id || "";
+        const newName = row.confirmed_category_name || row.suggested_category_name || "";
+        const existingOptions = state.categories
+            .filter((category) => category.is_active && category.slug !== "deals")
+            .map((category) => `<option value="id:${category.id}" ${Number(selectedId) === category.id ? "selected" : ""}>${esc(category.name)}</option>`)
+            .join("");
+        const newOption = newName ? `<option value="new:${esc(newName)}" selected>New category: ${esc(newName)}</option>` : "";
+        return `<div class="table-actions"><select data-import-category="${batchId}:${row.id}"><option value="">Choose category</option>${newOption}${existingOptions}</select><button data-use-import-category="${batchId}:${row.id}">Use</button></div>`;
+    }
+
+    async function productImportMarkup(batchId, embedded) {
+        if (!state.categories.length) state.categories = await API.get("/api/categories?active_only=false");
+        const [batch, summary, rows] = await Promise.all([
+            API.get(`/api/product-imports/${batchId}`),
+            API.get(`/api/product-imports/${batchId}/summary`),
+            API.get(`/api/product-imports/${batchId}/rows?skip=${state.importProductSkip}&limit=${state.importPageSize}`),
+        ]);
+        const table = rows.items.length ? `<div class="table-wrap"><table class="admin-table"><thead><tr><th>Upload</th><th>Row</th><th>Item code</th><th>Product</th><th>Price</th><th>AI / reviewed category</th><th>Status</th></tr></thead><tbody>${rows.items.map((row) => `<tr><td>${["pending_category", "ready"].includes(row.status) ? `<input class="import-row-check" type="checkbox" data-product-import-select="${batchId}:${row.id}" ${row.apply_selected ? "checked" : ""}>` : "—"}</td><td>${row.excel_row_number}</td><td>${esc(row.barcode || "—")}</td><td><strong>${esc(row.item_name || "—")}</strong>${row.ai_reason ? `<small>${esc(row.ai_reason)}</small>` : ""}</td><td>${row.uploaded_price === null ? "—" : API.formatMoney(row.uploaded_price)}</td><td>${["pending_category", "ready"].includes(row.status) ? categoryReviewControl(batchId, row) : "—"}</td><td>${row.suggested_category_name ? `<span class="new-category-pill">New: ${esc(row.suggested_category_name)}</span>` : statusPill(row.status)}</td></tr>`).join("")}</tbody></table></div>` : empty("No rows on this page.");
+        const from = rows.total ? rows.skip + 1 : 0;
+        const to = Math.min(rows.skip + rows.limit, rows.total);
+        const pager = `<div class="pagination"><button data-import-page="previous" ${rows.skip === 0 ? "disabled" : ""}>Previous</button><span>${from.toLocaleString()}–${to.toLocaleString()} of ${rows.total.toLocaleString()}</span><button data-import-page="next" ${to >= rows.total ? "disabled" : ""}>Next</button></div>`;
+        const finalButton = embedded ? "" : `<button class="admin-button primary" data-product-apply="${batchId}">Confirm & create selected products</button>`;
+        return `<div class="card-head"><div><h2>${embedded ? "New products found in master file" : `Product import #${batch.id}`}</h2><p>Choose products, run AI, review existing or proposed new categories, then confirm once.</p></div></div><div class="preview-summary"><span>${summary.total_rows.toLocaleString()} total</span><span>${summary.selected_rows.toLocaleString()} selected</span><span>${summary.categorized_rows.toLocaleString()} checked</span><span>${summary.pending_rows.toLocaleString()} remaining</span><span>${summary.existing_category_rows.toLocaleString()} existing category</span><span>${summary.new_category_rows.toLocaleString()} new category</span><span>${summary.invalid_rows.toLocaleString()} invalid</span></div><div class="import-progress"><span style="width:${Math.max(0, Math.min(100, summary.progress_percentage))}%"></span></div>${summary.new_category_rows ? `<p class="import-review-note">Groq proposed ${summary.new_category_rows} new category assignment(s). Review them below; categories are created only after final confirmation.</p>` : ""}${table}${pager}<div class="table-actions"><button data-product-ai="${batchId}">Categorize next selected rows</button><button data-product-confirm="${batchId}">Accept reviewed AI suggestions</button>${finalButton}</div>`;
+    }
+
+    async function refreshActiveImport() {
+        if (!state.activeImport) return;
+        if (state.activeImport.type === "products") {
+            const batch = await API.get(`/api/product-imports/${state.activeImport.productBatchId}`);
+            await renderImportPreview("products", batch);
+        } else {
+            const batch = await API.get(`/api/price-imports/${state.activeImport.priceBatchId}`);
+            await renderImportPreview(state.activeImport.type, batch);
+        }
     }
 
     async function loadContent() {
@@ -463,7 +513,7 @@
     async function openAdminForm(adminId = null) {
         const admin = adminId ? await API.get(`/api/admin/access/admins/${adminId}`) : null;
         const assignable = state.permissions.filter((permission) => permission.is_assignable_to_mini_admin);
-        modal(`<form class="modal-form" id="mini-admin-form" data-admin-id="${adminId || ""}"><span class="admin-eyebrow">${admin ? "Edit access" : "New team member"}</span><h2>${admin ? esc(admin.full_name) : "Add mini admin"}</h2><label>Full name<input name="full_name" minlength="2" required value="${esc(admin?.full_name || "")}"></label>${admin ? "" : `<label>Email address<input type="email" name="email" required></label><label>Temporary password<input type="password" name="password" minlength="8" required><small>Minimum 8 characters.</small></label>`}<span class="admin-eyebrow">Assigned branches</span><div class="checkbox-grid">${state.branches.map((branch) => `<label><input type="checkbox" name="branch_ids" value="${branch.id}" ${admin?.branch_ids.includes(branch.id) ? "checked" : ""}>${esc(branch.name)}</label>`).join("")}</div><span class="admin-eyebrow">Permissions</span><div class="checkbox-grid">${assignable.map((permission) => `<label><input type="checkbox" name="permission_codes" value="${esc(permission.code)}" ${admin?.permission_codes.includes(permission.code) || (!admin && ["products.read", "prices.read", "prices.update", "orders.read", "orders.update_status"].includes(permission.code)) ? "checked" : ""}>${esc(permission.description)}</label>`).join("")}</div><label class="check-label"><input type="checkbox" name="is_active" ${admin?.is_active === false ? "" : "checked"}> Account active</label><label class="check-label"><input type="checkbox" name="login_allowed" ${admin?.login_allowed === false ? "" : "checked"}> Login allowed</label><div class="form-row"><label>Allow login from<input type="datetime-local" name="login_allowed_from"></label><label>Allow login until<input type="datetime-local" name="login_allowed_until"></label></div><button class="admin-button primary" type="submit">${admin ? "Save access" : "Create mini admin"}</button></form>`);
+        modal(`<form class="modal-form" id="mini-admin-form" data-admin-id="${adminId || ""}"><span class="admin-eyebrow">${admin ? "Edit access" : "New team member"}</span><h2>${admin ? esc(admin.full_name) : "Add mini admin"}</h2><label>Full name<input name="full_name" minlength="2" required value="${esc(admin?.full_name || "")}"></label>${admin ? "" : `<label>Email address<input type="email" name="email" required></label><label>Temporary password<input type="password" name="password" minlength="8" required><small>Minimum 8 characters.</small></label>`}<span class="admin-eyebrow">Assigned branches</span><div class="checkbox-grid">${state.branches.map((branch) => `<label><input type="checkbox" name="branch_ids" value="${branch.id}" ${admin?.branch_ids.includes(branch.id) ? "checked" : ""}>${esc(branch.name)}</label>`).join("")}</div><span class="admin-eyebrow">Permissions</span><div class="checkbox-grid">${assignable.map((permission) => `<label><input type="checkbox" name="permission_codes" value="${esc(permission.code)}" ${admin?.permission_codes.includes(permission.code) || (!admin && ["products.read", "prices.read", "prices.update", "orders.read", "orders.update_status", "imports.manage"].includes(permission.code)) ? "checked" : ""}>${esc(permission.description)}</label>`).join("")}</div><label class="check-label"><input type="checkbox" name="is_active" ${admin?.is_active === false ? "" : "checked"}> Account active</label><label class="check-label"><input type="checkbox" name="login_allowed" ${admin?.login_allowed === false ? "" : "checked"}> Login allowed</label><div class="form-row"><label>Allow login from<input type="datetime-local" name="login_allowed_from"></label><label>Allow login until<input type="datetime-local" name="login_allowed_until"></label></div><button class="admin-button primary" type="submit">${admin ? "Save access" : "Create mini admin"}</button></form>`);
     }
 
     async function openSessions(adminId) {
@@ -605,10 +655,13 @@
         const masterSave = event.target.closest("[data-save-master]"); if (masterSave) { const input = document.querySelector(`[data-master-price="${masterSave.dataset.saveMaster}"]`); try { await API.patch(`/api/admin/business/products/${masterSave.dataset.saveMaster}/master-price`, { master_price: Number(input.value) }); toast("Master price updated."); await loadPrices(); } catch (error) { toast(error.message, "error"); } return; }
         const stock = event.target.closest("[data-stock-toggle]"); if (stock) { const [productId, branchId, value] = stock.dataset.stockToggle.split(":"); try { await API.put(`/api/availability/${productId}/${branchId}`, { is_in_stock: value === "true", stock_message: value === "true" ? null : "Temporarily out of stock" }); toast("Availability updated."); await loadInventory(); } catch (error) { toast(error.message, "error"); } return; }
         const stockReset = event.target.closest("[data-stock-reset]"); if (stockReset) { const [productId, branchId] = stockReset.dataset.stockReset.split(":"); try { await API.delete(`/api/availability/${productId}/${branchId}`); toast("Default availability restored."); await loadInventory(); } catch (error) { toast(error.message, "error"); } return; }
-        const priceApply = event.target.closest("[data-price-apply]"); if (priceApply) { const [type, batchId] = priceApply.dataset.priceApply.split(":"); try { const result = await API.post(`/api/price-imports/${type === "master" ? "master" : "branch"}/${batchId}/apply`, { confirm: true }); await renderImportPreview(type, result); toast("Price import applied."); } catch (error) { toast(error.message, "error"); } return; }
-        const productAi = event.target.closest("[data-product-ai]"); if (productAi) { try { await API.post(`/api/product-imports/${productAi.dataset.productAi}/categorize-ai?limit=100`, {}); const batch = await API.get(`/api/product-imports/${productAi.dataset.productAi}`); await renderImportPreview("products", batch); toast("AI categorization completed."); } catch (error) { toast(error.message, "error"); } return; }
-        const productConfirm = event.target.closest("[data-product-confirm]"); if (productConfirm) { try { await API.post(`/api/product-imports/${productConfirm.dataset.productConfirm}/confirm-ai`, { confirm: true }); const batch = await API.get(`/api/product-imports/${productConfirm.dataset.productConfirm}`); await renderImportPreview("products", batch); toast("AI suggestions confirmed."); } catch (error) { toast(error.message, "error"); } return; }
-        const productApply = event.target.closest("[data-product-apply]"); if (productApply) { try { const result = await API.post(`/api/product-imports/${productApply.dataset.productApply}/apply`, { confirm: true }); document.getElementById("import-preview").innerHTML = `<div class="empty-panel"><strong>${result.created_products} products created.</strong><br>${result.skipped_rows} row(s) skipped.</div>`; toast("Product import applied."); } catch (error) { toast(error.message, "error"); } return; }
+        const priceApply = event.target.closest("[data-price-apply]"); if (priceApply) { const [type, batchId] = priceApply.dataset.priceApply.split(":"); try { const result = await API.post(`/api/price-imports/branch/${batchId}/apply`, { confirm: true }); await renderImportPreview(type, result); toast("Selected prices applied."); } catch (error) { toast(error.message, "error"); } return; }
+        const masterConfirm = event.target.closest("[data-master-confirm-all]"); if (masterConfirm && confirm("Apply all selected price updates, create reviewed products and approved new categories?")) { try { const result = await API.post(`/api/price-imports/master/${masterConfirm.dataset.masterConfirmAll}/confirm-all`, { confirm: true }); document.getElementById("import-preview").innerHTML = `<div class="empty-panel"><strong>Import completed.</strong><br>${result.updated_prices.toLocaleString()} prices updated, ${result.unchanged_prices.toLocaleString()} unchanged, ${result.created_products.toLocaleString()} products and ${result.created_categories.length.toLocaleString()} categories created.</div>`; toast("Master import completed."); } catch (error) { toast(error.message, "error"); } return; }
+        const productAi = event.target.closest("[data-product-ai]"); if (productAi) { try { await API.post(`/api/product-imports/${productAi.dataset.productAi}/categorize-ai?limit=100`, {}); await refreshActiveImport(); toast("Next selected products categorized."); } catch (error) { toast(error.message, "error"); } return; }
+        const productConfirm = event.target.closest("[data-product-confirm]"); if (productConfirm) { try { await API.post(`/api/product-imports/${productConfirm.dataset.productConfirm}/confirm-ai`, { confirm: true }); await refreshActiveImport(); toast("AI suggestions accepted for selected rows."); } catch (error) { toast(error.message, "error"); } return; }
+        const productApply = event.target.closest("[data-product-apply]"); if (productApply && confirm("Create only the selected, reviewed products now?")) { try { const result = await API.post(`/api/product-imports/${productApply.dataset.productApply}/apply`, { confirm: true }); document.getElementById("import-preview").innerHTML = `<div class="empty-panel"><strong>${result.created_products.toLocaleString()} products created.</strong><br>${result.created_categories.length.toLocaleString()} categories created and ${result.skipped_rows.toLocaleString()} row(s) skipped.</div>`; toast("Product import applied."); } catch (error) { toast(error.message, "error"); } return; }
+        const useCategory = event.target.closest("[data-use-import-category]"); if (useCategory) { const [batchId, rowId] = useCategory.dataset.useImportCategory.split(":"); const selectElement = document.querySelector(`[data-import-category="${batchId}:${rowId}"]`); const value = selectElement?.value || ""; if (!value) { toast("Choose a category first.", "error"); return; } const isNew = value.startsWith("new:"); try { await API.patch(`/api/product-imports/${batchId}/rows/${rowId}/category`, { confirmed_category_id: isNew ? null : Number(value.split(":")[1]), confirmed_category_name: isNew ? value.slice(4) : null, apply_selected: true }); await refreshActiveImport(); toast("Category reviewed."); } catch (error) { toast(error.message, "error"); } return; }
+        const importPage = event.target.closest("[data-import-page]"); if (importPage && !importPage.disabled) { state.importProductSkip = Math.max(0, state.importProductSkip + (importPage.dataset.importPage === "next" ? state.importPageSize : -state.importPageSize)); await refreshActiveImport(); return; }
         if (event.target.closest("#new-discount")) return openDiscountForm();
         const discountPrice = event.target.closest("[data-discount-prices]"); if (discountPrice) return openDiscountPrices(discountPrice.dataset.discountPrices).catch((error) => toast(error.message, "error"));
         const toggleDiscount = event.target.closest("[data-toggle-discount]"); if (toggleDiscount) { const [id, active] = toggleDiscount.dataset.toggleDiscount.split(":"); try { await API.patch(`/api/discounts/${id}`, { is_active: active === "true" }); await loadDiscounts(); } catch (error) { toast(error.message, "error"); } return; }
@@ -635,6 +688,53 @@
     }
 
     async function handleChange(event) {
+        const priceImportSelect = event.target.closest(
+            "[data-price-import-select]",
+        );
+        if (priceImportSelect) {
+            const [batchId, rowId] = (
+                priceImportSelect.dataset.priceImportSelect
+            ).split(":");
+            try {
+                await API.patch(
+                    `/api/price-imports/${batchId}/rows/selection`,
+                    {
+                        row_ids: [Number(rowId)],
+                        apply_selected: priceImportSelect.checked,
+                    },
+                );
+                toast("Price row selection updated.");
+            } catch (error) {
+                priceImportSelect.checked = !priceImportSelect.checked;
+                toast(error.message, "error");
+            }
+            return;
+        }
+
+        const productImportSelect = event.target.closest(
+            "[data-product-import-select]",
+        );
+        if (productImportSelect) {
+            const [batchId, rowId] = (
+                productImportSelect.dataset.productImportSelect
+            ).split(":");
+            try {
+                await API.patch(
+                    `/api/product-imports/${batchId}/rows/selection`,
+                    {
+                        row_ids: [Number(rowId)],
+                        apply_selected: productImportSelect.checked,
+                    },
+                );
+                await refreshActiveImport();
+                toast("Product selection updated.");
+            } catch (error) {
+                productImportSelect.checked = !productImportSelect.checked;
+                toast(error.message, "error");
+            }
+            return;
+        }
+
         if (event.target.id === "catalog-select-all") {
             document.querySelectorAll(
                 "[data-product-select]:not(:disabled)",

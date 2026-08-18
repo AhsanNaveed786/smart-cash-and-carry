@@ -8,7 +8,9 @@ from fastapi import (
 from sqlalchemy.orm import Session
 
 from database import get_db
+from dependencies.admin_access import permission_required
 from schemas import (
+    ImportRowSelectionUpdate,
     ProductCategorizationRunResponse,
     ProductImportApplyRequest,
     ProductImportApplyResponse,
@@ -18,6 +20,7 @@ from schemas import (
     ProductImportConfirmAllRequest,
     ProductImportRowResponse,
     ProductImportRowsResponse,
+    ProductImportReviewSummary,
 )
 from services.product_category_ai_service import (
     categorize_product_import_rows,
@@ -33,12 +36,17 @@ from services.product_import_service import (
     create_product_import_preview,
     get_product_import_batch,
     get_product_import_rows,
+    get_product_import_review_summary,
+    update_product_import_row_selection,
 )
 
 
 router = APIRouter(
     prefix="/api/product-imports",
     tags=["Bulk Product Imports"],
+    dependencies=[
+        Depends(permission_required("imports.manage"))
+    ],
 )
 
 
@@ -158,4 +166,32 @@ def view_product_import_batch(
     return get_product_import_batch(
         db=db,
         batch_id=batch_id,
+    )
+
+
+@router.get(
+    "/{batch_id}/summary",
+    response_model=ProductImportReviewSummary,
+)
+def view_product_import_summary(
+    batch_id: int,
+    db: Session = Depends(get_db),
+):
+    return get_product_import_review_summary(db, batch_id)
+
+
+@router.patch(
+    "/{batch_id}/rows/selection",
+    response_model=ProductImportReviewSummary,
+)
+def change_product_row_selection(
+    batch_id: int,
+    selection: ImportRowSelectionUpdate,
+    db: Session = Depends(get_db),
+):
+    return update_product_import_row_selection(
+        db=db,
+        batch_id=batch_id,
+        row_ids=selection.row_ids,
+        apply_selected=selection.apply_selected,
     )

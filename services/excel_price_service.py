@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 import xlrd
 from fastapi import HTTPException, UploadFile, status
 from openpyxl import load_workbook
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 from models import (
@@ -18,6 +18,8 @@ from models import (
     PriceImportBatch,
     PriceImportRow,
     Product,
+    ProductImportBatch,
+    ProductImportRow,
 )
 from services.branch_service import get_branch_by_id
 
@@ -575,6 +577,13 @@ def get_price_import_preview(
         ).all()
     )
 
+    new_product_rows = db.scalar(
+        select(func.count(PriceImportRow.id)).where(
+            PriceImportRow.batch_id == batch_id,
+            PriceImportRow.status == "product_not_found",
+        )
+    ) or 0
+
     # Returning every row would create an enormous JSON response for a
     # 100,000-row import. The complete batch remains in PostgreSQL; the
     # admin preview only needs a representative first page.
@@ -582,12 +591,14 @@ def get_price_import_preview(
         "id": batch.id,
         "import_scope": batch.import_scope,
         "branch_id": batch.branch_id,
+        "product_import_batch_id": batch.product_import_batch_id,
         "original_filename": batch.original_filename,
         "status": batch.status,
         "total_rows": batch.total_rows,
         "changed_rows": batch.changed_rows,
         "unchanged_rows": batch.unchanged_rows,
         "invalid_rows": batch.invalid_rows,
+        "new_product_rows": new_product_rows,
         "created_at": batch.created_at,
         "applied_at": batch.applied_at,
         "rows": preview_rows,
@@ -681,6 +692,7 @@ async def create_master_price_preview(
         changed_rows = 0
         unchanged_rows = 0
         invalid_rows = 0
+        new_product_data: list[dict[str, Any]] = []
 
         for extracted_row in extracted_rows:
             barcode = extracted_row["barcode"]
@@ -722,9 +734,10 @@ async def create_master_price_preview(
                 if product is None:
                     row_status = "product_not_found"
                     error_message = (
-                        "No existing product was found for this barcode."
+                        "New product: review and categorize before "
+                        "final confirmation."
                     )
-                    invalid_rows += 1
+                    new_product_data.append(extracted_row)
 
                 else:
                     current_price = Decimal(
@@ -759,6 +772,44 @@ async def create_master_price_preview(
 
             db.add(import_row)
 
+        if new_product_data:
+            product_batch = ProductImportBatch(
+                original_filename=original_filename[:255],
+                status="preview",
+                total_rows=len(new_product_data),
+                valid_rows=len(new_product_data),
+                invalid_rows=0,
+                categorized_rows=0,
+            )
+            db.add(product_batch)
+            db.flush()
+            batch.product_import_batch_id = product_batch.id
+
+            for product_data in new_product_data:
+                db.add(
+                    ProductImportRow(
+                        batch_id=product_batch.id,
+                        excel_row_number=(
+                            product_data["excel_row_number"]
+                        ),
+                        barcode=product_data["barcode"],
+                        item_name=product_data["item_name"],
+                        uploaded_price=(
+                            product_data["uploaded_price"]
+                        ),
+                        suggested_category_id=None,
+                        suggested_category_name=None,
+                        confirmed_category_id=None,
+                        confirmed_category_name=None,
+                        category_confidence=None,
+                        category_source=None,
+                        ai_reason=None,
+                        status="pending_category",
+                        apply_selected=True,
+                        error_message=None,
+                    )
+                )
+
         batch.total_rows = len(extracted_rows)
         batch.changed_rows = changed_rows
         batch.unchanged_rows = unchanged_rows
@@ -781,7 +832,8 @@ async def create_master_price_preview(
 def apply_master_price_import(
     db: Session,
     batch_id: int,
-) -> PriceImportBatch:
+    commit_changes: bool = True,
+) -> dict[str, Any]:
     try:
         batch = db.scalar(
             select(PriceImportBatch)
@@ -829,7 +881,10 @@ def apply_master_price_import(
             batch.status = "applied"
             batch.applied_at = datetime.now(timezone.utc)
 
-            db.commit()
+            if commit_changes:
+                db.commit()
+            else:
+                db.flush()
 
             return get_price_import_preview(
                 db=db,
@@ -962,7 +1017,10 @@ def apply_master_price_import(
         batch.applied_at = datetime.now(timezone.utc)
 
         # Existing branch overrides remain untouched.
-        db.commit()
+        if commit_changes:
+            db.commit()
+        else:
+            db.flush()
 
         return get_price_import_preview(
             db=db,
@@ -976,6 +1034,50 @@ def apply_master_price_import(
     except Exception:
         db.rollback()
         raise
+
+
+def update_price_import_row_selection(
+    db: Session,
+    batch_id: int,
+    row_ids: list[int],
+    apply_selected: bool,
+) -> dict[str, Any]:
+    batch = db.get(PriceImportBatch, batch_id)
+    if not batch:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Price import preview not found.",
+        )
+    if batch.status != "preview":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This price import can no longer be edited.",
+        )
+
+    unique_ids = set(row_ids)
+    rows = list(
+        db.scalars(
+            select(PriceImportRow)
+            .where(
+                PriceImportRow.batch_id == batch_id,
+                PriceImportRow.id.in_(unique_ids),
+                PriceImportRow.status == "changed",
+            )
+            .with_for_update()
+        ).all()
+    )
+    if len(rows) != len(unique_ids):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "Only changed price rows can be selected or removed."
+            ),
+        )
+
+    for import_row in rows:
+        import_row.apply_selected = apply_selected
+    db.commit()
+    return get_price_import_preview(db, batch_id)
 
 
 async def create_branch_price_preview(

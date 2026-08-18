@@ -454,12 +454,14 @@ class PriceImportBatchResponse(SchemaBase):
     id: int
     import_scope: str
     branch_id: int | None
+    product_import_batch_id: int | None = None
     original_filename: str
     status: str
     total_rows: int
     changed_rows: int
     unchanged_rows: int
     invalid_rows: int
+    new_product_rows: int = 0
     created_at: datetime
     applied_at: datetime | None
 
@@ -473,6 +475,14 @@ class PriceImportPreviewResponse(
 class PriceImportApplyRequest(SchemaBase):
     confirm: Literal[True]
 
+
+class ImportRowSelectionUpdate(SchemaBase):
+    row_ids: list[int] = Field(
+        min_length=1,
+        max_length=500,
+    )
+    apply_selected: bool
+
 class ProductImportRowResponse(SchemaBase):
     id: int
     batch_id: int
@@ -482,6 +492,8 @@ class ProductImportRowResponse(SchemaBase):
     uploaded_price: Decimal | None
     suggested_category_id: int | None
     confirmed_category_id: int | None
+    suggested_category_name: str | None = None
+    confirmed_category_name: str | None = None
     category_confidence: Decimal | None
     category_source: str | None
     ai_reason: str | None
@@ -510,8 +522,37 @@ class ProductImportPreviewResponse(
 
 
 class ProductImportCategoryConfirmRequest(SchemaBase):
-    confirmed_category_id: int = Field(gt=0)
+    confirmed_category_id: int | None = Field(
+        default=None,
+        gt=0,
+    )
+    confirmed_category_name: str | None = Field(
+        default=None,
+        min_length=2,
+        max_length=120,
+    )
     apply_selected: bool = True
+
+    @model_validator(mode="after")
+    def validate_category_choice(
+        self,
+    ) -> "ProductImportCategoryConfirmRequest":
+        if not self.apply_selected:
+            return self
+
+        has_existing = self.confirmed_category_id is not None
+        has_new = bool(
+            self.confirmed_category_name
+            and self.confirmed_category_name.strip()
+        )
+
+        if has_existing == has_new:
+            raise ValueError(
+                "Choose either one existing category or one new "
+                "category name."
+            )
+
+        return self
 
 class ProductImportRowsResponse(SchemaBase):
     total: int
@@ -537,6 +578,18 @@ class ProductImportConfirmationResponse(SchemaBase):
     remaining_unconfirmed_rows: int
     batch_status: str
 
+
+class ProductImportReviewSummary(SchemaBase):
+    batch_id: int
+    total_rows: int
+    selected_rows: int
+    categorized_rows: int
+    pending_rows: int
+    existing_category_rows: int
+    new_category_rows: int
+    invalid_rows: int
+    progress_percentage: float
+
 class ProductImportApplyRequest(SchemaBase):
     confirm: Literal[True]
 
@@ -547,6 +600,18 @@ class ProductImportApplyResponse(SchemaBase):
     created_products: int
     skipped_rows: int
     applied_at: datetime
+    created_categories: list[str] = Field(default_factory=list)
+
+
+class MasterImportConfirmResponse(SchemaBase):
+    price_batch_id: int
+    product_batch_id: int | None
+    updated_prices: int
+    unchanged_prices: int
+    created_products: int
+    created_categories: list[str]
+    skipped_products: int
+    status: str
 
 class AdminLoginRequest(SchemaBase):
     email: EmailStr
@@ -618,6 +683,7 @@ class MiniAdminCreateRequest(SchemaBase):
             "prices.update",
             "orders.read",
             "orders.update_status",
+            "imports.manage",
         ],
         min_length=1,
         max_length=20,

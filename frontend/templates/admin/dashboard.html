@@ -8,20 +8,20 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('static', path='/css/admin.css') }}?v=20260818-2">
+    <link rel="stylesheet" href="{{ url_for('static', path='/css/admin.css') }}?v=20260818-3">
 </head>
 <body class="admin-app-page">
     <div class="admin-loading" id="admin-loading"><div class="admin-spinner"></div><strong>Opening your workspace…</strong></div>
     <div class="admin-app" id="admin-app" hidden>
         <aside class="admin-sidebar" id="admin-sidebar">
-            <a href="/" class="admin-brand"><span class="admin-brand-mark">S</span><span><strong>SMART</strong><small>CONTROL DESK</small></span></a>
+            <a href="/" class="admin-brand"><span class="admin-brand-mark"><img src="/static/images/default-logo.jpg" alt="SMART CASH & CARRY logo"></span><span><strong>SMART</strong><small>CONTROL DESK</small></span></a>
             <nav class="admin-nav" id="admin-nav">
                 <button class="active" data-section="overview"><span>⌂</span>Overview</button>
                 <button data-section="orders" data-permission="orders.read"><span>▣</span>Orders</button>
                 <button data-section="prices" data-permission="prices.read"><span>₨</span>Products & prices</button>
                 <button data-section="catalog" data-super-only><span>▦</span>Catalog & branches</button>
                 <button data-section="inventory" data-super-only><span>◫</span>Branch inventory</button>
-                <button data-section="imports" data-super-only><span>⇧</span>Excel imports</button>
+                <button data-section="imports" data-permission="imports.manage"><span>⇧</span>Excel imports</button>
                 <button data-section="content" data-super-only><span>✦</span>Store content</button>
                 <button data-section="discounts" data-super-only><span>%</span>Deals & discounts</button>
                 <button data-section="team" data-super-only><span>♙</span>Admins & sessions</button>
@@ -63,7 +63,7 @@
                     <section class="admin-card"><div class="card-head"><div><h2>Product availability</h2><p id="inventory-count">Select a branch</p></div></div><div id="inventory-table" class="table-wrap"></div></section>
                 </section>
 
-                <section class="admin-section" id="section-imports" data-super-only>
+                <section class="admin-section" id="section-imports" data-permission="imports.manage">
                     <div class="page-heading"><div><span class="admin-eyebrow">Safe bulk updates</span><h1>Excel imports</h1><p>Every file is previewed before prices or products are changed.</p></div></div>
                     <div class="three-card-grid">
                         <form class="admin-card import-card" data-import-form="master"><span class="feature-icon">₨</span><h2>Master prices</h2><p>Barcode, Item Name and Price. Up to 100,000 rows.</p><input type="file" name="excel_file" accept=".xlsx,.xls" required><button class="admin-button primary" type="submit">Upload & preview</button></form>
@@ -103,6 +103,6 @@
     <div class="admin-modal" id="admin-modal" aria-hidden="true"><div class="admin-modal-card"><button class="modal-close" data-close-modal>×</button><div id="admin-modal-content"></div></div></div>
     <div class="admin-toast-stack" id="admin-toast-stack"></div>
     <script src="{{ url_for('static', path='/js/api.js') }}?v=20260818-2"></script>
-    <script src="{{ url_for('static', path='/js/admin.js') }}?v=20260818-2"></script>
+    <script src="{{ url_for('static', path='/js/admin.js') }}?v=20260818-3"></script>
 </body>
 </html>

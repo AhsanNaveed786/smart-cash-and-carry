@@ -663,6 +663,15 @@ class PriceImportBatch(Base):
         index=True,
     )
 
+    product_import_batch_id: Mapped[int | None] = mapped_column(
+        ForeignKey(
+            "product_import_batches.id",
+            ondelete="SET NULL",
+        ),
+        nullable=True,
+        index=True,
+    )
+
     original_filename: Mapped[str] = mapped_column(
         String(255),
         nullable=False,
@@ -719,6 +728,13 @@ class PriceImportBatch(Base):
         back_populates="batch",
         cascade="all, delete-orphan",
         order_by="PriceImportRow.excel_row_number",
+    )
+
+
+    product_import_batch: Mapped[
+        ProductImportBatch | None
+    ] = relationship(
+        foreign_keys=[product_import_batch_id],
     )
 
 
@@ -1001,6 +1017,16 @@ class ProductImportRow(Base):
         ),
         nullable=True,
         index=True,
+    )
+
+    suggested_category_name: Mapped[str | None] = mapped_column(
+        String(120),
+        nullable=True,
+    )
+
+    confirmed_category_name: Mapped[str | None] = mapped_column(
+        String(120),
+        nullable=True,
     )
 
     category_confidence: Mapped[Decimal | None] = mapped_column(

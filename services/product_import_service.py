@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import HTTPException, UploadFile, status
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from models import (
@@ -96,6 +96,121 @@ def get_product_import_rows(
         "skip": skip,
         "limit": limit,
         "items": rows,
+    }
+
+
+def update_product_import_row_selection(
+    db: Session,
+    batch_id: int,
+    row_ids: list[int],
+    apply_selected: bool,
+) -> dict[str, Any]:
+    batch = get_product_import_batch(db, batch_id)
+
+    if batch.status in {"applied", "cancelled", "failed"}:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This product import can no longer be edited.",
+        )
+
+    unique_ids = set(row_ids)
+    rows = list(
+        db.scalars(
+            select(ProductImportRow)
+            .where(
+                ProductImportRow.batch_id == batch_id,
+                ProductImportRow.id.in_(unique_ids),
+                ProductImportRow.status.in_(
+                    {"pending_category", "ready"}
+                ),
+            )
+            .with_for_update()
+        ).all()
+    )
+
+    if len(rows) != len(unique_ids):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "One or more selected rows are missing or cannot "
+                "be reviewed."
+            ),
+        )
+
+    for import_row in rows:
+        import_row.apply_selected = apply_selected
+
+    db.commit()
+
+    return get_product_import_review_summary(db, batch_id)
+
+
+def get_product_import_review_summary(
+    db: Session,
+    batch_id: int,
+) -> dict[str, Any]:
+    batch = get_product_import_batch(db, batch_id)
+
+    def count_rows(*filters: Any) -> int:
+        return db.scalar(
+            select(func.count(ProductImportRow.id)).where(
+                ProductImportRow.batch_id == batch_id,
+                *filters,
+            )
+        ) or 0
+
+    selected_rows = count_rows(
+        ProductImportRow.apply_selected.is_(True),
+        ProductImportRow.status.in_(
+            {"pending_category", "ready"}
+        ),
+    )
+    categorized_rows = count_rows(
+        ProductImportRow.apply_selected.is_(True),
+        ProductImportRow.status == "ready",
+    )
+    pending_rows = count_rows(
+        ProductImportRow.apply_selected.is_(True),
+        ProductImportRow.status == "pending_category",
+    )
+    existing_category_rows = count_rows(
+        ProductImportRow.apply_selected.is_(True),
+        ProductImportRow.status == "ready",
+        or_(
+            ProductImportRow.confirmed_category_id.is_not(None),
+            ProductImportRow.suggested_category_id.is_not(None),
+        ),
+    )
+    new_category_rows = count_rows(
+        ProductImportRow.apply_selected.is_(True),
+        ProductImportRow.status == "ready",
+        or_(
+            ProductImportRow.confirmed_category_name.is_not(None),
+            ProductImportRow.suggested_category_name.is_not(None),
+        ),
+    )
+    invalid_rows = count_rows(
+        ProductImportRow.status.in_(
+            {"invalid", "duplicate_file", "already_exists"}
+        )
+    )
+
+    progress = (
+        round((categorized_rows / selected_rows) * 100, 2)
+        if selected_rows
+        else 100.0
+    )
+
+    return {
+        "batch_id": batch.id,
+        "total_rows": batch.total_rows,
+        "selected_rows": selected_rows,
+        "categorized_rows": categorized_rows,
+        "pending_rows": pending_rows,
+        "existing_category_rows": existing_category_rows,
+        "new_category_rows": new_category_rows,
+        "invalid_rows": invalid_rows,
+        "progress_percentage": progress,
     }
 
 
@@ -253,7 +368,9 @@ async def create_product_import_preview(
                 category_source=None,
                 ai_reason=None,
                 status=row_status,
-                apply_selected=False,
+                apply_selected=(
+                    row_status == "pending_category"
+                ),
                 error_message=error_message,
             )
 

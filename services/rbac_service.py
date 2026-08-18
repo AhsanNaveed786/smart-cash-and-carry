@@ -22,6 +22,10 @@ PASSWORD_HASHER = PasswordHash.recommended()
 
 PERMISSION_CATALOG = {
     "products.read": ("View product listings", True),
+    "imports.manage": (
+        "Upload, review and confirm product and price imports",
+        True,
+    ),
     "prices.read": ("View branch product prices", True),
     "prices.update": ("Update assigned-branch prices", True),
     "orders.read": ("View assigned-branch orders", True),

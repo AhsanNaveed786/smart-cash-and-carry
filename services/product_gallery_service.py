@@ -1,6 +1,3 @@
-from pathlib import Path
-from uuid import uuid4
-
 from fastapi import HTTPException, UploadFile, status
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
@@ -8,13 +5,7 @@ from sqlalchemy.orm import Session
 
 from models import Product, ProductImage, ProductVariant
 from schemas import ProductImageUpdate
-from services.product_image_service import (
-    ALLOWED_CONTENT_TYPES,
-    MAXIMUM_FILE_SIZE,
-    PRODUCT_IMAGE_DIRECTORY,
-    delete_old_product_image,
-    optimize_image,
-)
+from services.media_service import delete_media_file, save_uploaded_image
 from services.variant_service import (
     get_product_variant_by_id,
     get_variant_product,
@@ -23,36 +14,11 @@ from services.variant_service import (
 
 async def save_gallery_image_file(
     image_file: UploadFile,
-) -> tuple[str, Path]:
-    try:
-        if image_file.content_type not in ALLOWED_CONTENT_TYPES:
-            raise HTTPException(
-                status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-                detail="Only JPEG, PNG and WebP images are allowed.",
-            )
-
-        image_content = await image_file.read(MAXIMUM_FILE_SIZE + 1)
-
-        if not image_content:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Uploaded image is empty.",
-            )
-
-        if len(image_content) > MAXIMUM_FILE_SIZE:
-            raise HTTPException(
-                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-                detail="Image size cannot be greater than 5 MB.",
-            )
-
-        optimized_content = optimize_image(image_content)
-        filename = f"{uuid4().hex}.webp"
-        image_path = PRODUCT_IMAGE_DIRECTORY / filename
-        image_path.write_bytes(optimized_content)
-
-        return f"/uploads/products/{filename}", image_path
-    finally:
-        await image_file.close()
+) -> str:
+    return await save_uploaded_image(
+        uploaded_file=image_file,
+        folder_name="products",
+    )
 
 
 def get_gallery_image_by_id(
@@ -213,7 +179,7 @@ async def add_product_gallery_image(
     )
     should_be_primary = is_primary or image_count == 0
     legacy_image_url = product.image_url if image_count == 0 else None
-    new_image_url, new_image_path = await save_gallery_image_file(image_file)
+    new_image_url = await save_gallery_image_file(image_file)
 
     try:
         if should_be_primary:
@@ -242,18 +208,18 @@ async def add_product_gallery_image(
         db.refresh(product_image)
     except IntegrityError:
         db.rollback()
-        new_image_path.unlink(missing_ok=True)
+        delete_media_file(new_image_url)
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Product image conflicts with existing gallery data.",
         )
     except Exception:
         db.rollback()
-        new_image_path.unlink(missing_ok=True)
+        delete_media_file(new_image_url)
         raise
 
     if legacy_image_url and legacy_image_url != new_image_url:
-        delete_old_product_image(legacy_image_url)
+        delete_media_file(legacy_image_url)
 
     return product_image
 
@@ -349,5 +315,5 @@ def delete_product_gallery_image(
         db.rollback()
         raise
 
-    delete_old_product_image(image_url)
+    delete_media_file(image_url)
     return {"message": "Gallery image deleted successfully."}
