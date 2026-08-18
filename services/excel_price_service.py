@@ -21,12 +21,13 @@ from models import (
 )
 from services.branch_service import get_branch_by_id
 
-MAXIMUM_FILE_SIZE = 10 * 1024 * 1024
-MAXIMUM_UNCOMPRESSED_SIZE = 100 * 1024 * 1024
+MAXIMUM_FILE_SIZE = 25 * 1024 * 1024
+MAXIMUM_UNCOMPRESSED_SIZE = 250 * 1024 * 1024
 MAXIMUM_ARCHIVE_FILES = 5000
-MAXIMUM_IMPORT_ROWS = 50_000
+MAXIMUM_IMPORT_ROWS = 100_000
 MAXIMUM_SCANNED_ROWS = 100_000
 HEADER_SEARCH_ROWS = 20
+PREVIEW_ROW_LIMIT = 200
 
 TWO_DECIMAL_PLACES = Decimal("0.01")
 
@@ -347,7 +348,7 @@ def extract_xlsx_rows(
                     ),
                     detail=(
                         "The Excel file contains more than "
-                        "50,000 product rows."
+                        "100,000 product rows."
                     ),
                 )
 
@@ -504,7 +505,7 @@ def extract_xls_rows(
                     ),
                     detail=(
                         "The Excel file contains more than "
-                        "50,000 product rows."
+                        "100,000 product rows."
                     ),
                 )
 
@@ -556,14 +557,8 @@ def get_products_by_barcodes(
 def get_price_import_preview(
     db: Session,
     batch_id: int,
-) -> PriceImportBatch:
-    batch = db.scalar(
-        select(PriceImportBatch)
-        .options(
-            selectinload(PriceImportBatch.rows)
-        )
-        .where(PriceImportBatch.id == batch_id)
-    )
+) -> dict[str, Any]:
+    batch = db.get(PriceImportBatch, batch_id)
 
     if not batch:
         raise HTTPException(
@@ -571,7 +566,32 @@ def get_price_import_preview(
             detail="Price import preview not found.",
         )
 
-    return batch
+    preview_rows = list(
+        db.scalars(
+            select(PriceImportRow)
+            .where(PriceImportRow.batch_id == batch_id)
+            .order_by(PriceImportRow.excel_row_number)
+            .limit(PREVIEW_ROW_LIMIT)
+        ).all()
+    )
+
+    # Returning every row would create an enormous JSON response for a
+    # 100,000-row import. The complete batch remains in PostgreSQL; the
+    # admin preview only needs a representative first page.
+    return {
+        "id": batch.id,
+        "import_scope": batch.import_scope,
+        "branch_id": batch.branch_id,
+        "original_filename": batch.original_filename,
+        "status": batch.status,
+        "total_rows": batch.total_rows,
+        "changed_rows": batch.changed_rows,
+        "unchanged_rows": batch.unchanged_rows,
+        "invalid_rows": batch.invalid_rows,
+        "created_at": batch.created_at,
+        "applied_at": batch.applied_at,
+        "rows": preview_rows,
+    }
 
 
 async def create_master_price_preview(
@@ -612,7 +632,7 @@ async def create_master_price_preview(
                 status_code=(
                     status.HTTP_413_REQUEST_ENTITY_TOO_LARGE
                 ),
-                detail="Excel file size cannot exceed 10 MB.",
+                detail="Excel file size cannot exceed 25 MB.",
             )
 
         extracted_rows = extract_excel_rows(
@@ -1002,7 +1022,7 @@ async def create_branch_price_preview(
                 status_code=(
                     status.HTTP_413_REQUEST_ENTITY_TOO_LARGE
                 ),
-                detail="Excel file size cannot exceed 10 MB.",
+                detail="Excel file size cannot exceed 25 MB.",
             )
 
         extracted_rows = extract_excel_rows(

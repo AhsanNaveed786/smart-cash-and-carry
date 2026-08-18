@@ -244,18 +244,27 @@
 
         const logo = document.getElementById("store-logo");
         const logoFallback = document.getElementById("store-logo-fallback");
+        const brandMark = document.getElementById("brand-mark");
         const logoUrl = imageUrl(settings.logo_url);
 
         if (logo && logoFallback) {
             if (logoUrl) {
+                brandMark?.classList.add("has-logo");
                 logo.src = logoUrl;
                 logo.hidden = false;
                 logoFallback.hidden = true;
+                logo.onload = () => {
+                    brandMark?.classList.add("has-logo");
+                    logo.hidden = false;
+                    logoFallback.hidden = true;
+                };
                 logo.onerror = () => {
+                    brandMark?.classList.remove("has-logo");
                     logo.hidden = true;
                     logoFallback.hidden = false;
                 };
             } else {
+                brandMark?.classList.remove("has-logo");
                 logo.removeAttribute("src");
                 logo.hidden = true;
                 logoFallback.hidden = false;

@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('static', path='/css/admin.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', path='/css/admin.css') }}?v=20260818-2">
 </head>
 <body class="admin-app-page">
     <div class="admin-loading" id="admin-loading"><div class="admin-spinner"></div><strong>Opening your workspace…</strong></div>
@@ -66,9 +66,9 @@
                 <section class="admin-section" id="section-imports" data-super-only>
                     <div class="page-heading"><div><span class="admin-eyebrow">Safe bulk updates</span><h1>Excel imports</h1><p>Every file is previewed before prices or products are changed.</p></div></div>
                     <div class="three-card-grid">
-                        <form class="admin-card import-card" data-import-form="master"><span class="feature-icon">₨</span><h2>Master prices</h2><p>Excel columns: Barcode, Item Name, Price.</p><input type="file" name="excel_file" accept=".xlsx,.xls" required><button class="admin-button primary" type="submit">Upload & preview</button></form>
-                        <form class="admin-card import-card" data-import-form="branch"><span class="feature-icon">⌖</span><h2>Branch prices</h2><p>Apply overrides only to one selected branch.</p><select name="branch_id" data-branch-select required></select><input type="file" name="excel_file" accept=".xlsx,.xls" required><button class="admin-button primary" type="submit">Upload & preview</button></form>
-                        <form class="admin-card import-card" data-import-form="products"><span class="feature-icon">✦</span><h2>New products</h2><p>Upload products, then run AI categorization and confirm.</p><input type="file" name="excel_file" accept=".xlsx,.xls" required><button class="admin-button primary" type="submit">Upload & preview</button></form>
+                        <form class="admin-card import-card" data-import-form="master"><span class="feature-icon">₨</span><h2>Master prices</h2><p>Barcode, Item Name and Price. Up to 100,000 rows.</p><input type="file" name="excel_file" accept=".xlsx,.xls" required><button class="admin-button primary" type="submit">Upload & preview</button></form>
+                        <form class="admin-card import-card" data-import-form="branch"><span class="feature-icon">⌖</span><h2>Branch prices</h2><p>One selected branch per file, up to 100,000 rows.</p><select name="branch_id" data-branch-select required></select><input type="file" name="excel_file" accept=".xlsx,.xls" required><button class="admin-button primary" type="submit">Upload & preview</button></form>
+                        <form class="admin-card import-card" data-import-form="products"><span class="feature-icon">✦</span><h2>New products</h2><p>Up to 100,000 rows, then AI categorization and confirmation.</p><input type="file" name="excel_file" accept=".xlsx,.xls" required><button class="admin-button primary" type="submit">Upload & preview</button></form>
                     </div>
                     <section class="admin-card import-preview" id="import-preview"><div class="empty-panel">Upload a file to see its safe preview here.</div></section>
                 </section>
@@ -102,7 +102,7 @@
 
     <div class="admin-modal" id="admin-modal" aria-hidden="true"><div class="admin-modal-card"><button class="modal-close" data-close-modal>×</button><div id="admin-modal-content"></div></div></div>
     <div class="admin-toast-stack" id="admin-toast-stack"></div>
-    <script src="{{ url_for('static', path='/js/api.js') }}"></script>
-    <script src="{{ url_for('static', path='/js/admin.js') }}"></script>
+    <script src="{{ url_for('static', path='/js/api.js') }}?v=20260818-2"></script>
+    <script src="{{ url_for('static', path='/js/admin.js') }}?v=20260818-2"></script>
 </body>
 </html>

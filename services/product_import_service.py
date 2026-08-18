@@ -137,7 +137,7 @@ async def create_product_import_preview(
                 status_code=(
                     status.HTTP_413_REQUEST_ENTITY_TOO_LARGE
                 ),
-                detail="Excel file size cannot exceed 10 MB.",
+                detail="Excel file size cannot exceed 25 MB.",
             )
 
         extracted_rows = extract_excel_rows(

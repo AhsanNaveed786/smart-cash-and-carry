@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('static', path='/css/site.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', path='/css/site.css') }}?v=20260818-2">
     {% block head %}{% endblock %}
 </head>
 <body class="page-{{ page_name }}">
@@ -33,9 +33,9 @@
 
     <div class="announcement-bar" id="announcement-bar">
         <div class="container announcement-track">
-            <span id="announcement-primary">Free delivery on orders above Rs. 3,000</span>
-            <span class="announcement-separator" id="announcement-separator"></span>
-            <span id="announcement-secondary">Fresh prices • Reliable delivery</span>
+            <span id="announcement-primary"></span>
+            <span class="announcement-separator" id="announcement-separator" hidden></span>
+            <span id="announcement-secondary"></span>
         </div>
     </div>
 
@@ -43,12 +43,12 @@
         <div class="container header-main">
             <a href="/" class="brand" aria-label="SMART CASH & CARRY home">
                 <span class="brand-mark" id="brand-mark">
-                    <img id="store-logo" alt="SMART CASH & CARRY logo" hidden>
+                    <img id="store-logo" alt="" hidden onerror="this.hidden=true; this.parentElement.classList.remove('has-logo'); document.getElementById('store-logo-fallback').hidden=false;">
                     <svg id="store-logo-fallback" viewBox="0 0 52 52" aria-hidden="true"><path d="M9 17h34l-3 24H12L9 17Z"/><path d="M17 17c0-8 18-8 18 0"/><path d="M7 17h38"/><circle cx="19" cy="28" r="2"/><circle cx="33" cy="28" r="2"/><path d="M19 35c4 3 10 3 14 0"/></svg>
                 </span>
                 <span class="brand-copy">
                     <strong id="store-name">SMART CASH & CARRY</strong>
-                    <small>Freshness in every basket</small>
+                    <small>Pay less. Expect more.</small>
                 </span>
             </a>
 
@@ -112,8 +112,8 @@
     </div>
 
     <div class="toast-stack" id="toast-stack" aria-live="polite"></div>
-    <script src="{{ url_for('static', path='/js/api.js') }}"></script>
-    <script src="{{ url_for('static', path='/js/store.js') }}"></script>
+    <script src="{{ url_for('static', path='/js/api.js') }}?v=20260818-2"></script>
+    <script src="{{ url_for('static', path='/js/store.js') }}?v=20260818-2"></script>
     {% block scripts %}{% endblock %}
 </body>
 </html>
