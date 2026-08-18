@@ -7,10 +7,6 @@ from models import Branch, Category
 
 BRANCHES = [
     {
-        "name": "Shakargarh",
-        "code": "SHAKARGARH",
-    },
-    {
         "name": "Zafarwal",
         "code": "ZAFARWAL",
     },
@@ -19,8 +15,16 @@ BRANCHES = [
         "code": "NAROWAL",
     },
     {
-        "name": "Kingra",
-        "code": "KINGRA",
+        "name": "Pasrur",
+        "code": "PASRUR",
+    },
+    {
+        "name": "Shakargarh",
+        "code": "SHAKARGARH",
+    },
+    {
+        "name": "Nurkot",
+        "code": "NURKOT",
     },
 ]
 

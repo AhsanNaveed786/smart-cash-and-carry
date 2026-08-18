@@ -256,10 +256,10 @@ def extract_xlsx_rows(
         for worksheet in workbook.worksheets:
             for row in worksheet.iter_rows(
                 min_row=1,
-                max_row=min(
-                    HEADER_SEARCH_ROWS,
-                    worksheet.max_row,
-                ),
+                # Some valid XLSX writers omit the worksheet dimension
+                # metadata. In read-only mode openpyxl then reports
+                # max_row=None, even though the sheet contains rows.
+                max_row=HEADER_SEARCH_ROWS,
             ):
                 values = [cell.value for cell in row]
                 detected = detect_header_columns(values)
@@ -287,8 +287,11 @@ def extract_xlsx_rows(
                 ),
             )
 
+        worksheet_max_row = selected_worksheet.max_row
+
         if (
-            selected_worksheet.max_row - header_row_number
+            worksheet_max_row is not None
+            and worksheet_max_row - header_row_number
             > MAXIMUM_SCANNED_ROWS
         ):
             raise HTTPException(

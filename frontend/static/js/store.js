@@ -237,13 +237,58 @@
     function applyContent() {
         const settings = state.content?.settings;
         if (!settings) return;
-        document.querySelectorAll("#store-name").forEach((node) => { node.textContent = settings.store_name; });
+
+        document.querySelectorAll("#store-name").forEach((node) => {
+            node.textContent = settings.store_name;
+        });
+
+        const logo = document.getElementById("store-logo");
+        const logoFallback = document.getElementById("store-logo-fallback");
+        const logoUrl = imageUrl(settings.logo_url);
+
+        if (logo && logoFallback) {
+            if (logoUrl) {
+                logo.src = logoUrl;
+                logo.hidden = false;
+                logoFallback.hidden = true;
+                logo.onerror = () => {
+                    logo.hidden = true;
+                    logoFallback.hidden = false;
+                };
+            } else {
+                logo.removeAttribute("src");
+                logo.hidden = true;
+                logoFallback.hidden = false;
+            }
+        }
+
         const announcement = document.getElementById("announcement-bar");
-        if (announcement) announcement.hidden = !settings.announcement_is_active;
         const primary = document.getElementById("announcement-primary");
         const secondary = document.getElementById("announcement-secondary");
-        if (primary && settings.announcement_primary) primary.textContent = settings.announcement_primary;
-        if (secondary && settings.announcement_secondary) secondary.textContent = settings.announcement_secondary;
+        const separator = document.getElementById("announcement-separator");
+        const primaryText = settings.announcement_primary || "";
+        const secondaryText = settings.announcement_secondary || "";
+
+        if (primary) {
+            primary.textContent = primaryText;
+            primary.hidden = !primaryText;
+        }
+
+        if (secondary) {
+            secondary.textContent = secondaryText;
+            secondary.hidden = !secondaryText;
+        }
+
+        if (separator) {
+            separator.hidden = !(primaryText && secondaryText);
+        }
+
+        if (announcement) {
+            announcement.hidden = (
+                !settings.announcement_is_active
+                || (!primaryText && !secondaryText)
+            );
+        }
     }
 
     function openBranchModal(force = false) {

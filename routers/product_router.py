@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, Query, status
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from database import get_db
@@ -9,6 +10,7 @@ from schemas import (
     ProductUpdate,
 )
 from services.product_service import (
+    bulk_deactivate_products,
     create_product,
     deactivate_product,
     get_all_products,
@@ -16,6 +18,19 @@ from services.product_service import (
     get_product_by_id,
     update_product,
 )
+
+
+class ProductBulkDeactivateRequest(BaseModel):
+    product_ids: list[int] = Field(
+        min_length=1,
+        max_length=500,
+    )
+
+
+class ProductBulkDeactivateResponse(BaseModel):
+    requested_count: int
+    deactivated_count: int
+    product_ids: list[int]
 
 
 router = APIRouter(
@@ -64,6 +79,20 @@ def get_product_using_barcode(
     return get_product_by_barcode(
         db=db,
         barcode=barcode,
+    )
+
+
+@router.post(
+    "/bulk-deactivate",
+    response_model=ProductBulkDeactivateResponse,
+)
+def bulk_remove_products(
+    request_data: ProductBulkDeactivateRequest,
+    db: Session = Depends(get_db),
+):
+    return bulk_deactivate_products(
+        db=db,
+        product_ids=request_data.product_ids,
     )
 
 

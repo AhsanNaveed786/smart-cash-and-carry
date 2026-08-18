@@ -314,3 +314,53 @@ def deactivate_product(
     db.refresh(product)
 
     return product
+
+
+def bulk_deactivate_products(
+    db: Session,
+    product_ids: list[int],
+) -> dict[str, Any]:
+    unique_product_ids = list(dict.fromkeys(product_ids))
+
+    products = list(
+        db.scalars(
+            select(Product).where(
+                Product.id.in_(unique_product_ids)
+            )
+        ).all()
+    )
+
+    found_product_ids = {
+        product.id
+        for product in products
+    }
+
+    missing_product_ids = [
+        product_id
+        for product_id in unique_product_ids
+        if product_id not in found_product_ids
+    ]
+
+    if missing_product_ids:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "message": "One or more products were not found.",
+                "missing_product_ids": missing_product_ids,
+            },
+        )
+
+    deactivated_product_ids: list[int] = []
+
+    for product in products:
+        if product.is_active:
+            product.is_active = False
+            deactivated_product_ids.append(product.id)
+
+    db.commit()
+
+    return {
+        "requested_count": len(unique_product_ids),
+        "deactivated_count": len(deactivated_product_ids),
+        "product_ids": unique_product_ids,
+    }

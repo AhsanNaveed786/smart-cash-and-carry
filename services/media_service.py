@@ -8,7 +8,15 @@ from PIL import Image, ImageOps, UnidentifiedImageError
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
-STATIC_DIRECTORY = PROJECT_ROOT / "static"
+# The public frontend is mounted from frontend/static in main.py. Save
+# managed content there as well so returned /static/uploads/... URLs are
+# served by the same StaticFiles mount.
+FRONTEND_STATIC_DIRECTORY = PROJECT_ROOT / "frontend" / "static"
+STATIC_DIRECTORY = (
+    FRONTEND_STATIC_DIRECTORY
+    if FRONTEND_STATIC_DIRECTORY.is_dir()
+    else PROJECT_ROOT / "static"
+)
 UPLOAD_DIRECTORY = STATIC_DIRECTORY / "uploads"
 
 MAX_IMAGE_SIZE = 5 * 1024 * 1024
