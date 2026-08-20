@@ -39,9 +39,17 @@
     function toast(message, type = "success") {
         const item = document.createElement("div");
         item.className = `admin-toast ${type}`;
-        item.textContent = message;
+        const iconSvg = type === "error"
+            ? `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--danger);flex-shrink:0"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>`
+            : `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--success);flex-shrink:0"><circle cx="12" cy="12" r="10"/><polyline points="9 12 11 14 15 10"/></svg>`;
+        item.innerHTML = `${iconSvg}<span>${esc(message)}</span>`;
         document.getElementById("admin-toast-stack").appendChild(item);
-        setTimeout(() => item.remove(), 3500);
+        setTimeout(() => {
+            item.style.opacity = "0";
+            item.style.transform = "translateX(20px)";
+            item.style.transition = "opacity .25s ease, transform .25s ease";
+            setTimeout(() => item.remove(), 250);
+        }, 3500);
     }
 
     function modal(markup) {
@@ -164,6 +172,13 @@
             document.getElementById("admin-app").hidden = false;
             await showSection("overview", true);
             startSessionMonitor();
+
+            // Periodic auto-refresh for overview stats every 45 seconds
+            setInterval(() => {
+                if (state.section === "overview" && !document.hidden) {
+                    loadOverview().catch(() => {});
+                }
+            }, 45000);
         } catch (error) {
             if (error.status === 401 || error.status === 403) location.replace("/admin/login");
             else {
@@ -243,15 +258,17 @@
     }
 
     async function loadPrices() {
-        const values = formObject(document.getElementById("price-filters"));
-        values.active_only = document.querySelector('#price-filters [name="active_only"]').checked;
-        values.different_only = document.querySelector('#price-filters [name="different_only"]').checked;
+        const form = document.getElementById("price-filters");
+        if (!form) return;
+        const values = formObject(form);
+        values.active_only = document.querySelector('#price-filters [name="active_only"]')?.checked ?? true;
+        values.different_only = document.querySelector('#price-filters [name="different_only"]')?.checked ?? false;
         state.priceResult = await API.get(`/api/admin/business/products/prices${API.query({ ...values, skip: 0, limit: 500 })}`);
         document.getElementById("prices-count").textContent = `${state.priceResult.total.toLocaleString()} product(s)`;
         const items = state.priceResult.items || [];
         if (!items.length) { document.getElementById("prices-table").innerHTML = empty("No matching products."); return; }
         const branches = accessibleBranches();
-        document.getElementById("prices-table").innerHTML = `<table class="admin-table"><thead><tr><th>Product</th><th>Master price</th><th>Price rule</th>${branches.map((branch) => `<th>${esc(branch.name)}</th>`).join("")}</tr></thead><tbody>${items.map((product) => `<tr><td><strong>${esc(product.product_name)}</strong><small>${esc(product.barcode)} · ${esc(product.category_name)}</small></td><td>${isSuper() ? `<div class="table-actions"><input class="mini-price-input" data-master-price="${product.product_id}" type="number" min="0" step="0.01" value="${product.master_price}"><button data-save-master="${product.product_id}">Save</button></div>` : API.formatMoney(product.master_price)}</td><td><span class="price-pill ${product.same_price_on_all_branches ? "" : "different"}">${product.same_price_on_all_branches ? "Same on all branches" : `Different: ${esc(product.different_branch_names.join(", "))}`}</span></td>${branches.map((branch) => { const value = product.branch_prices.find((price) => price.branch_id === branch.id); return `<td><div class="price-cell"><strong>${API.formatMoney(value?.effective_price)}</strong><small>${value?.price_source === "branch_override" ? "Branch price" : "Master price"}</small>${can("prices.update") ? `<div class="table-actions"><input class="mini-price-input" data-branch-price="${branch.id}:${product.product_id}" type="number" min="0" step="0.01" value="${value?.effective_price ?? product.master_price}"><button data-save-branch-price="${branch.id}:${product.product_id}">Save</button>${value?.price_source === "branch_override" ? `<button data-reset-branch-price="${branch.id}:${product.product_id}">Reset</button>` : ""}</div>` : ""}</div></td>`; }).join("")}</tr>`).join("")}</tbody></table>`;
+        document.getElementById("prices-table").innerHTML = `<table class="admin-table"><thead><tr><th>Product</th><th>Master price</th><th>Price rule</th>${branches.map((branch) => `<th>${esc(branch.name)}</th>`).join("")}</tr></thead><tbody>${items.map((product) => `<tr><td><strong>${esc(product.product_name)}</strong><small>${esc(product.barcode)} · ${esc(product.category_name)}</small></td><td>${isSuper() ? `<div class="table-actions"><input class="mini-price-input" data-master-price="${product.product_id}" type="number" min="0" step="0.01" value="${product.master_price}" title="Press Enter to quick-save"><button data-save-master="${product.product_id}">Save</button></div>` : API.formatMoney(product.master_price)}</td><td><span class="price-pill ${product.same_price_on_all_branches ? "" : "different"}">${product.same_price_on_all_branches ? "Same on all branches" : `Different: ${esc(product.different_branch_names.join(", "))}`}</span></td>${branches.map((branch) => { const value = product.branch_prices.find((price) => price.branch_id === branch.id); return `<td><div class="price-cell"><strong>${API.formatMoney(value?.effective_price)}</strong><small>${value?.price_source === "branch_override" ? "Branch price" : "Master price"}</small>${can("prices.update") ? `<div class="table-actions"><input class="mini-price-input" data-branch-price="${branch.id}:${product.product_id}" type="number" min="0" step="0.01" value="${value?.effective_price ?? product.master_price}" title="Press Enter to quick-save"><button data-save-branch-price="${branch.id}:${product.product_id}">Save</button>${value?.price_source === "branch_override" ? `<button data-reset-branch-price="${branch.id}:${product.product_id}">Reset</button>` : ""}</div>` : ""}</div></td>`; }).join("")}</tr>`).join("")}</tbody></table>`;
     }
 
     async function saveBranchPrice(key) {
@@ -876,8 +893,53 @@
         try { await API.upload(`/api/content/banners/${bannerImage.dataset.bannerImage}/image`, data); toast("Banner image uploaded."); await loadContent(); } catch (error) { toast(error.message, "error"); }
     }
 
+    // Debounce helper for live search
+    let searchDebounceTimer = null;
+    function handleLiveSearch(event) {
+        const input = event.target;
+        if (input.id === "catalog-search-input" || input.closest("#catalog-product-filters")) {
+            clearTimeout(searchDebounceTimer);
+            searchDebounceTimer = setTimeout(() => {
+                state.catalogSkip = 0;
+                loadCatalog().catch(() => {});
+            }, 250);
+        } else if (input.id === "price-search-input" || input.closest("#price-filters")) {
+            clearTimeout(searchDebounceTimer);
+            searchDebounceTimer = setTimeout(() => {
+                loadPrices().catch(() => {});
+            }, 250);
+        }
+    }
+
+    // Quick save on Enter in price inputs & Escape to close modal
+    function handleKeyDown(event) {
+        if (event.key === "Escape") {
+            const container = document.getElementById("admin-modal");
+            if (container && container.classList.contains("is-open")) {
+                closeModal();
+            }
+        } else if (event.key === "Enter") {
+            const target = event.target;
+            if (target.matches("[data-branch-price]")) {
+                event.preventDefault();
+                saveBranchPrice(target.dataset.branchPrice).catch((err) => toast(err.message, "error"));
+            } else if (target.matches("[data-master-price]")) {
+                event.preventDefault();
+                const productId = target.dataset.masterPrice;
+                API.patch(`/api/admin/business/products/${productId}/master-price`, { master_price: Number(target.value) })
+                    .then(() => {
+                        toast("Master price updated.");
+                        return loadPrices();
+                    })
+                    .catch((err) => toast(err.message, "error"));
+            }
+        }
+    }
+
     document.addEventListener("submit", handleSubmit);
     document.addEventListener("click", handleClick);
     document.addEventListener("change", handleChange);
+    document.addEventListener("input", handleLiveSearch);
+    document.addEventListener("keydown", handleKeyDown);
     document.addEventListener("DOMContentLoaded", bootstrap);
 })();

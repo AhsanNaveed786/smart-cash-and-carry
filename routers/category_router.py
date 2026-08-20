@@ -2,6 +2,8 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from database import get_db
+from dependencies.admin_access import require_current_admin
+from models import Admin
 from schemas import (
     CategoryCreate,
     CategoryResponse,
@@ -58,6 +60,7 @@ def get_category(
 def add_category(
     category_data: CategoryCreate,
     db: Session = Depends(get_db),
+    _admin: Admin = Depends(require_current_admin),
 ):
     return create_category(
         db=db,
@@ -73,6 +76,7 @@ def edit_category(
     category_id: int,
     category_data: CategoryUpdate,
     db: Session = Depends(get_db),
+    _admin: Admin = Depends(require_current_admin),
 ):
     return update_category(
         db=db,
@@ -88,6 +92,7 @@ def edit_category(
 def remove_category(
     category_id: int,
     db: Session = Depends(get_db),
+    _admin: Admin = Depends(require_current_admin),
 ):
     return deactivate_category(
         db=db,

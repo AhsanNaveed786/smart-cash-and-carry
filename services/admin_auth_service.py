@@ -2,6 +2,8 @@ import hashlib
 import hmac
 import os
 import secrets
+import threading
+from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 
 from fastapi import (
@@ -19,6 +21,60 @@ from models import Admin, AdminSession
 from schemas import AdminLoginRequest
 from services.password_service import verify_password
 from services.rbac_service import validate_admin_login_policy
+
+
+# ---------------------------------------------------------------------------
+# In-memory login rate limiter
+# Tracks failed login attempts per IP address.
+# After LOGIN_MAX_ATTEMPTS failures within LOGIN_WINDOW_SECONDS the IP is
+# locked out for LOGIN_LOCKOUT_SECONDS.
+# ---------------------------------------------------------------------------
+LOGIN_MAX_ATTEMPTS = 5
+LOGIN_WINDOW_SECONDS = 300     # 5 minutes rolling window
+LOGIN_LOCKOUT_SECONDS = 900    # 15 minutes lockout
+
+_rate_lock = threading.Lock()
+_failed_attempts: dict[str, list[datetime]] = defaultdict(list)
+
+
+def _get_client_ip(request: Request) -> str:
+    forwarded = request.headers.get("X-Forwarded-For")
+    if forwarded:
+        return forwarded.split(",")[0].strip()[:45]
+    if request.client:
+        return request.client.host[:45]
+    return "unknown"
+
+
+def _check_rate_limit(ip: str) -> None:
+    """Raise HTTP 429 if the IP has exceeded the allowed failure count."""
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(seconds=LOGIN_WINDOW_SECONDS)
+
+    with _rate_lock:
+        # Remove attempts outside the rolling window
+        _failed_attempts[ip] = [
+            t for t in _failed_attempts[ip] if t > cutoff
+        ]
+        if len(_failed_attempts[ip]) >= LOGIN_MAX_ATTEMPTS:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=(
+                    "Too many failed login attempts from this IP. "
+                    "Please wait 15 minutes before trying again."
+                ),
+            )
+
+
+def _record_failed_attempt(ip: str) -> None:
+    with _rate_lock:
+        _failed_attempts[ip].append(datetime.now(timezone.utc))
+
+
+def _clear_failed_attempts(ip: str) -> None:
+    with _rate_lock:
+        _failed_attempts.pop(ip, None)
+
 
 
 SESSION_COOKIE_NAME = "smart_admin_session"
@@ -143,6 +199,11 @@ def login_admin(
     request: Request,
     response: Response,
 ) -> dict:
+    client_ip = _get_client_ip(request)
+
+    # Reject the request before touching the DB if the IP is locked out.
+    _check_rate_limit(client_ip)
+
     normalized_email = str(
         login_data.email
     ).strip().lower()
@@ -160,10 +221,14 @@ def login_admin(
             admin.password_hash,
         )
     ):
+        _record_failed_attempt(client_ip)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password.",
         )
+
+    # Clear failure counter on successful credential check.
+    _clear_failed_attempts(client_ip)
 
     validate_admin_login_policy(admin)
 

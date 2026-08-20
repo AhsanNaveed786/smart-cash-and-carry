@@ -3,6 +3,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from database import get_db
+from dependencies.admin_access import require_current_admin
+from models import Admin
 from schemas import (
     ProductCreate,
     ProductListResponse,
@@ -89,6 +91,7 @@ def get_product_using_barcode(
 def bulk_remove_products(
     request_data: ProductBulkDeactivateRequest,
     db: Session = Depends(get_db),
+    _admin: Admin = Depends(require_current_admin),
 ):
     return bulk_deactivate_products(
         db=db,
@@ -118,6 +121,7 @@ def get_product(
 def add_product(
     product_data: ProductCreate,
     db: Session = Depends(get_db),
+    _admin: Admin = Depends(require_current_admin),
 ):
     return create_product(
         db=db,
@@ -133,6 +137,7 @@ def edit_product(
     product_id: int,
     product_data: ProductUpdate,
     db: Session = Depends(get_db),
+    _admin: Admin = Depends(require_current_admin),
 ):
     return update_product(
         db=db,
@@ -148,6 +153,7 @@ def edit_product(
 def remove_product(
     product_id: int,
     db: Session = Depends(get_db),
+    _admin: Admin = Depends(require_current_admin),
 ):
     return deactivate_product(
         db=db,

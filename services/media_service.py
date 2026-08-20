@@ -124,11 +124,18 @@ async def save_uploaded_image(
         safe_folder = safe_folder or "general"
 
         if cloud_storage_enabled():
-            return await asyncio.to_thread(
-                upload_to_cloudinary,
-                optimized_content,
-                safe_folder,
-            )
+            try:
+                return await asyncio.to_thread(
+                    upload_to_cloudinary,
+                    optimized_content,
+                    safe_folder,
+                )
+            except Exception as error:
+                import logging
+                logging.getLogger("smart_cash_carry").warning(
+                    "Cloudinary upload failed (%s). Falling back to local disk storage.",
+                    error,
+                )
 
         target_directory = UPLOAD_DIRECTORY / safe_folder
         target_directory.mkdir(parents=True, exist_ok=True)

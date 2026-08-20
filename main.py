@@ -1,6 +1,8 @@
+import logging
+import time
 from pathlib import Path
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Request, Response
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -107,6 +109,24 @@ create_upload_directories()
 
 Base.metadata.create_all(bind=engine)
 
+try:
+    from run_migrations import main as apply_migrations
+    apply_migrations()
+except Exception as exc:
+    print(f"Auto-migration check: {exc}")
+
+
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+logger = logging.getLogger("smart_cash_carry")
+logger.info("Smart Cash & Carry API starting up")
+
 
 app = FastAPI(
     title="SMART CASH & CARRY",
@@ -116,6 +136,55 @@ app = FastAPI(
     ),
     version="2.0.0",
 )
+
+
+# ---------------------------------------------------------------------------
+# Security headers middleware
+# ---------------------------------------------------------------------------
+@app.middleware("http")
+async def add_security_headers(
+    request: Request,
+    call_next,
+) -> Response:
+    start = time.perf_counter()
+    response: Response = await call_next(request)
+    duration_ms = (time.perf_counter() - start) * 1000
+
+    # Log slow requests (>500 ms) to help spot N+1 or missing indexes
+    if duration_ms > 500:
+        logger.warning(
+            "Slow request: %s %s took %.0f ms",
+            request.method,
+            request.url.path,
+            duration_ms,
+        )
+
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "SAMEORIGIN"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = (
+        "strict-origin-when-cross-origin"
+    )
+    response.headers["Permissions-Policy"] = (
+        "geolocation=(), microphone=(), camera=()"
+    )
+    return response
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.exception(
+        "Unhandled error on %s %s: %s",
+        request.method,
+        request.url.path,
+        exc,
+    )
+    from fastapi.responses import JSONResponse
+    return JSONResponse(
+        status_code=500,
+        content={"detail": f"Upload/Server error: {str(exc)}"},
+    )
+
 
 
 # Uploaded category icons, banners and content images

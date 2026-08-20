@@ -2,6 +2,8 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from database import get_db
+from dependencies.admin_access import require_current_admin
+from models import Admin
 from schemas import (
     BranchCreate,
     BranchResponse,
@@ -58,6 +60,7 @@ def get_branch(
 def add_branch(
     branch_data: BranchCreate,
     db: Session = Depends(get_db),
+    _admin: Admin = Depends(require_current_admin),
 ):
     return create_branch(
         db=db,
@@ -73,6 +76,7 @@ def edit_branch(
     branch_id: int,
     branch_data: BranchUpdate,
     db: Session = Depends(get_db),
+    _admin: Admin = Depends(require_current_admin),
 ):
     return update_branch(
         db=db,
@@ -88,6 +92,7 @@ def edit_branch(
 def remove_branch(
     branch_id: int,
     db: Session = Depends(get_db),
+    _admin: Admin = Depends(require_current_admin),
 ):
     return deactivate_branch(
         db=db,

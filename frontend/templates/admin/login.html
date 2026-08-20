@@ -3,49 +3,83 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="theme-color" content="#063f34">
-    <title>Admin sign in | SMART CASH & CARRY</title>
+    <meta name="theme-color" content="#021f18">
+    <title>Admin sign in | SMART CASH &amp; CARRY</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('static', path='/css/admin.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', path='/css/admin.css') }}?v=20260821-1">
 </head>
 <body class="admin-login-page">
     <main class="login-shell">
         <section class="login-brand-panel">
-            <a href="/" class="admin-brand"><span class="admin-brand-mark">S</span><span><strong>SMART</strong><small>CASH & CARRY</small></span></a>
-            <div class="login-brand-copy"><span class="admin-eyebrow">Store operations</span><h1>One calm place to run every branch.</h1><p>Manage orders, stock and prices with role-based access built around your team.</p></div>
-            <div class="login-points"><span>✓ Branch-aware order control</span><span>✓ Permanent status history</span><span>✓ Protected revenue and exports</span></div>
+            <div class="login-glow"></div>
+            <a href="/" class="admin-brand">
+                <span class="admin-brand-mark"><img src="/static/images/default-logo.jpg" alt="SMART CASH &amp; CARRY logo"></span>
+                <span><strong>SMART</strong><small>Control Desk</small></span>
+            </a>
+            <div class="login-brand-copy">
+                <span class="admin-eyebrow">Store operations platform</span>
+                <h1>One calm place<br>to run every branch.</h1>
+                <p>Manage orders, stock and prices with role-based access built around your team — wherever they are.</p>
+            </div>
+            <div class="login-points">
+                <div class="login-point"><span class="lp-check">✓</span> Branch-aware order control</div>
+                <div class="login-point"><span class="lp-check">✓</span> Permanent status history</div>
+                <div class="login-point"><span class="lp-check">✓</span> Protected revenue &amp; exports</div>
+                <div class="login-point"><span class="lp-check">✓</span> Role-based team access</div>
+            </div>
         </section>
+
         <section class="login-form-panel">
-            <form class="login-card" id="admin-login-form">
-                <a href="/" class="back-store">← Back to storefront</a>
+            <form class="login-card" id="admin-login-form" novalidate>
+                <a href="/" class="back-store">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                    Back to storefront
+                </a>
                 <span class="admin-eyebrow">Staff portal</span>
                 <h2>Welcome back</h2>
                 <p>Sign in with your authorized admin account.</p>
-                <label><span>Email address</span><input type="email" name="email" autocomplete="username" required placeholder="admin@smartcashcarry.com"></label>
-                <label><span>Password</span><div class="password-field"><input id="admin-password" type="password" name="password" autocomplete="current-password" required><button type="button" id="toggle-password">Show</button></div></label>
+                <label>
+                    <span>Email address</span>
+                    <input type="email" name="email" autocomplete="username" required placeholder="admin@smartcashcarry.com">
+                </label>
+                <label>
+                    <span>Password</span>
+                    <div class="password-field">
+                        <input id="admin-password" type="password" name="password" autocomplete="current-password" required>
+                        <button type="button" id="toggle-password" aria-label="Toggle password visibility">Show</button>
+                    </div>
+                </label>
                 <div class="login-error" id="login-error" hidden></div>
-                <button class="admin-button primary full" type="submit" id="login-button">Sign in securely</button>
+                <button class="admin-button primary full" type="submit" id="login-button">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+                    Sign in securely
+                </button>
                 <small class="login-help">Access is logged and may be controlled by the super admin.</small>
             </form>
         </section>
     </main>
-    <script src="{{ url_for('static', path='/js/api.js') }}"></script>
+
+    <script src="{{ url_for('static', path='/js/api.js') }}?v=20260821-1"></script>
     <script>
         const form = document.getElementById("admin-login-form");
         const errorBox = document.getElementById("login-error");
         const button = document.getElementById("login-button");
+        const originalButtonHTML = button.innerHTML;
+
         document.getElementById("toggle-password").addEventListener("click", (event) => {
             const input = document.getElementById("admin-password");
-            input.type = input.type === "password" ? "text" : "password";
-            event.currentTarget.textContent = input.type === "password" ? "Show" : "Hide";
+            const isPassword = input.type === "password";
+            input.type = isPassword ? "text" : "password";
+            event.currentTarget.textContent = isPassword ? "Hide" : "Show";
         });
+
         form.addEventListener("submit", async (event) => {
             event.preventDefault();
             errorBox.hidden = true;
             button.disabled = true;
-            button.textContent = "Signing in…";
+            button.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="animation:spin .7s linear infinite"><path d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0"/></svg> Signing in…';
             const data = new FormData(form);
             try {
                 const result = await SmartAPI.post("/api/admin/auth/login", {
@@ -57,12 +91,15 @@
             } catch (error) {
                 errorBox.textContent = error.message;
                 errorBox.hidden = false;
-            } finally {
                 button.disabled = false;
-                button.textContent = "Sign in securely";
+                button.innerHTML = originalButtonHTML;
             }
         });
+
         SmartAPI.get("/api/admin/auth/me").then(() => location.replace("/admin")).catch(() => {});
     </script>
+    <style>
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
 </body>
 </html>
