@@ -4,6 +4,7 @@ from typing import Any
 
 from fastapi import HTTPException, status
 from sqlalchemy import func, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from models import Category, Product
@@ -331,6 +332,42 @@ def deactivate_product(
     db.refresh(product)
 
     return product
+
+
+def delete_product(
+    db: Session,
+    product_id: int,
+) -> dict[str, Any]:
+    product = get_product_by_id(
+        db=db,
+        product_id=product_id,
+    )
+
+    try:
+        db.delete(product)
+        db.commit()
+
+        return {
+            "message": "Product permanently deleted.",
+            "product_id": product_id,
+        }
+
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Cannot delete this product because it is "
+                "referenced in existing customer orders. "
+                "You can disable it instead."
+            ),
+        )
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception:
+        db.rollback()
+        raise
 
 
 def bulk_deactivate_products(

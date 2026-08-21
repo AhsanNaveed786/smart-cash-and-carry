@@ -16,6 +16,7 @@ from services.product_service import (
     bulk_deactivate_products,
     create_product,
     deactivate_product,
+    delete_product,
     get_all_products,
     get_product_by_barcode,
     get_product_by_id,
@@ -172,6 +173,20 @@ def remove_product(
     _admin: Admin = Depends(require_current_admin),
 ):
     return deactivate_product(
+        db=db,
+        product_id=product_id,
+    )
+
+
+@router.delete(
+    "/{product_id}/permanent",
+)
+def permanently_remove_product(
+    product_id: int,
+    db: Session = Depends(get_db),
+    _admin: Admin = Depends(require_current_admin),
+):
+    return delete_product(
         db=db,
         product_id=product_id,
     )
