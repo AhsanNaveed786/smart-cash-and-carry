@@ -382,8 +382,49 @@
     }
 
     async function openVariants(productId) {
-        const [product, variants] = await Promise.all([API.get(`/api/products/${productId}`), API.get(`/api/variants/product/${productId}?include_inactive=true`)]);
-        modal(`<div class="modal-form"><span class="admin-eyebrow">Product options</span><h2>${esc(product.name)} variants</h2><div class="session-list">${variants.map((variant) => `<div class="session-row"><div><strong>${esc(variant.name)}</strong><small>${esc(variant.sku)} · Adjustment ${API.formatMoney(variant.price_adjustment)} · ${variant.is_active ? "Active" : "Inactive"}</small></div>${variant.is_active ? `<button class="admin-button danger" data-deactivate-variant="${variant.id}:${productId}">Disable</button>` : ""}</div>`).join("") || empty("No variants. Customers will buy the standard product.")}</div><form class="modal-form nested-form" id="variant-create-form" data-product-id="${productId}"><h3>Add a variant</h3><div class="form-row"><label>Option name<input name="name" required placeholder="Large / 1 litre"></label><label>SKU<input name="sku" required pattern="[A-Za-z0-9._-]+"></label></div><label>Price adjustment<input type="number" name="price_adjustment" step="0.01" value="0"></label><label class="check-label"><input type="checkbox" name="is_default"> Default option</label><button class="admin-button primary" type="submit">Add variant</button></form></div>`);
+        const [product, variants] = await Promise.all([
+            API.get(`/api/products/${productId}`),
+            API.get(`/api/variants/product/${productId}?include_inactive=true`),
+        ]);
+        const masterPrice = Number(product.master_price || 0);
+        modal(`<div class="modal-form">
+            <span class="admin-eyebrow">Product options &amp; sizing</span>
+            <h2>${esc(product.name)} variants</h2>
+            <p>Base product master price: <strong>${API.formatMoney(masterPrice)}</strong></p>
+            <div class="session-list">
+                ${variants.map((variant) => {
+                    const finalPrice = masterPrice + Number(variant.price_adjustment || 0);
+                    return `<div class="session-row">
+                        <div>
+                            <strong>${esc(variant.name)} ${variant.is_default ? '<span class="status-pill active" style="margin-left:6px">Default Option</span>' : ""}</strong>
+                            <small>${esc(variant.sku)} · Price: <strong>${API.formatMoney(finalPrice)}</strong> · ${variant.is_active ? "Active" : "Inactive"}</small>
+                        </div>
+                        <div class="table-actions">
+                            ${variant.is_active ? `<button class="admin-button danger" data-deactivate-variant="${variant.id}:${productId}">Disable</button>` : '<span class="status-pill inactive">Disabled</span>'}
+                        </div>
+                    </div>`;
+                }).join("") || empty("No variants yet. Customers will buy the standard product at base price.")}
+            </div>
+            <form class="modal-form nested-form" id="variant-create-form" data-product-id="${productId}" data-master-price="${masterPrice}">
+                <h3>Add a variant</h3>
+                <div class="form-row">
+                    <label>Option name<input name="name" required placeholder="e.g. 500g / 1 kg / Large Pack"></label>
+                    <label>SKU<input name="sku" required pattern="[A-Za-z0-9._-]+" placeholder="e.g. SKU-500G"></label>
+                </div>
+                <div class="form-row">
+                    <label>Variant Final Price (Rs.)
+                        <input type="number" name="variant_price" step="0.01" min="0" required value="${masterPrice}" placeholder="e.g. ${masterPrice}">
+                    </label>
+                    <label class="check-label" style="align-self:end">
+                        <input type="checkbox" name="is_default"> Set as Default Option
+                    </label>
+                </div>
+                <small style="color:var(--muted);margin-top:-6px;display:block">
+                    Enter the exact price customer will pay for this variant (Base price is ${API.formatMoney(masterPrice)}).
+                </small>
+                <button class="admin-button primary" type="submit">Add variant</button>
+            </form>
+        </div>`);
     }
 
     async function loadInventory() {
@@ -583,8 +624,27 @@
             try { productId ? await API.patch(`/api/products/${productId}`, data) : await API.post("/api/products", data); closeModal(); toast(productId ? "Product updated." : "Product created."); await loadCatalog(); state.loaded.delete("prices"); } catch (error) { toast(error.message, "error"); }
         }
         if (form.id === "variant-create-form") {
-            event.preventDefault(); const data = formObject(form);
-            try { await API.post(`/api/variants/product/${form.dataset.productId}`, { name: data.name, sku: data.sku, barcode: null, attributes: {}, price_adjustment: Number(data.price_adjustment || 0), display_order: 0, is_default: form.is_default.checked, is_active: true }); toast("Product variant added."); await openVariants(form.dataset.productId); } catch (error) { toast(error.message, "error"); }
+            event.preventDefault();
+            const data = formObject(form);
+            const masterPrice = Number(form.dataset.masterPrice || 0);
+            const variantPrice = Number(data.variant_price);
+            const priceAdjustment = isNaN(variantPrice) ? 0 : (variantPrice - masterPrice);
+            try {
+                await API.post(`/api/variants/product/${form.dataset.productId}`, {
+                    name: data.name,
+                    sku: data.sku,
+                    barcode: null,
+                    attributes: {},
+                    price_adjustment: priceAdjustment,
+                    display_order: 0,
+                    is_default: form.is_default.checked,
+                    is_active: true,
+                });
+                toast("Product variant added.");
+                await openVariants(form.dataset.productId);
+            } catch (error) {
+                toast(error.message, "error");
+            }
         }
         if (form.matches("[data-import-form]")) { event.preventDefault(); try { await uploadImport(form); } catch (error) { toast(error.message, "error"); } }
         if (form.id === "order-status-form") {
