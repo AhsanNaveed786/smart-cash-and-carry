@@ -1,4 +1,5 @@
 from decimal import Decimal
+from typing import Any
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
@@ -19,6 +20,7 @@ from schemas import (
 def get_variant_product(
     db: Session,
     product_id: int,
+    allow_inactive: bool = False,
 ) -> Product:
     product = db.get(
         Product,
@@ -31,7 +33,7 @@ def get_variant_product(
             detail="Product not found.",
         )
 
-    if not product.is_active:
+    if not product.is_active and not allow_inactive:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
@@ -74,6 +76,7 @@ def get_product_variants(
     get_variant_product(
         db=db,
         product_id=product_id,
+        allow_inactive=include_inactive,
     )
 
     statement = (
@@ -560,6 +563,83 @@ def deactivate_product_variant(
         return get_product_variant_by_id(
             db=db,
             variant_id=variant.id,
+        )
+
+    except Exception:
+        db.rollback()
+        raise
+
+
+def activate_product_variant(
+    db: Session,
+    variant_id: int,
+) -> ProductVariant:
+    variant = get_product_variant_by_id(
+        db=db,
+        variant_id=variant_id,
+    )
+
+    try:
+        variant.is_active = True
+
+        db.flush()
+
+        ensure_product_has_default_variant(
+            db=db,
+            product_id=variant.product_id,
+        )
+
+        db.commit()
+
+        return get_product_variant_by_id(
+            db=db,
+            variant_id=variant.id,
+        )
+
+    except Exception:
+        db.rollback()
+        raise
+
+
+def delete_product_variant(
+    db: Session,
+    variant_id: int,
+) -> dict[str, Any]:
+    variant = get_product_variant_by_id(
+        db=db,
+        variant_id=variant_id,
+    )
+
+    product_id = variant.product_id
+    was_default = variant.is_default
+
+    try:
+        db.delete(variant)
+        db.flush()
+
+        if was_default:
+            ensure_product_has_default_variant(
+                db=db,
+                product_id=product_id,
+            )
+
+        db.commit()
+
+        return {
+            "message": "Product variant permanently deleted.",
+            "variant_id": variant_id,
+            "product_id": product_id,
+        }
+
+    except HTTPException:
+        db.rollback()
+        raise
+
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Cannot delete this variant because it is referenced by existing orders. You can disable it instead.",
         )
 
     except Exception:

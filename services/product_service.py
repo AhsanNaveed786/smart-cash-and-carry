@@ -299,6 +299,23 @@ def update_product(
     return product
 
 
+def activate_product(
+    db: Session,
+    product_id: int,
+) -> Product:
+    product = get_product_by_id(
+        db=db,
+        product_id=product_id,
+    )
+
+    product.is_active = True
+
+    db.commit()
+    db.refresh(product)
+
+    return product
+
+
 def deactivate_product(
     db: Session,
     product_id: int,

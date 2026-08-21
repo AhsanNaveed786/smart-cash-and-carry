@@ -12,6 +12,7 @@ from schemas import (
     ProductUpdate,
 )
 from services.product_service import (
+    activate_product,
     bulk_deactivate_products,
     create_product,
     deactivate_product,
@@ -143,6 +144,21 @@ def edit_product(
         db=db,
         product_id=product_id,
         product_data=product_data,
+    )
+
+
+@router.post(
+    "/{product_id}/activate",
+    response_model=ProductResponse,
+)
+def enable_product(
+    product_id: int,
+    db: Session = Depends(get_db),
+    _admin: Admin = Depends(require_current_admin),
+):
+    return activate_product(
+        db=db,
+        product_id=product_id,
     )
 
 

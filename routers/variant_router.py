@@ -13,8 +13,10 @@ from schemas import (
     ProductVariantUpdate,
 )
 from services.variant_service import (
+    activate_product_variant,
     create_product_variant,
     deactivate_product_variant,
+    delete_product_variant,
     get_product_variant_by_id,
     get_product_variants,
     update_product_variant,
@@ -92,6 +94,20 @@ def edit_product_variant(
     )
 
 
+@router.post(
+    "/{variant_id}/activate",
+    response_model=ProductVariantResponse,
+)
+def enable_product_variant(
+    variant_id: int,
+    db: Session = Depends(get_db),
+):
+    return activate_product_variant(
+        db=db,
+        variant_id=variant_id,
+    )
+
+
 @router.delete(
     "/{variant_id}",
     response_model=ProductVariantResponse,
@@ -101,6 +117,19 @@ def remove_product_variant(
     db: Session = Depends(get_db),
 ):
     return deactivate_product_variant(
+        db=db,
+        variant_id=variant_id,
+    )
+
+
+@router.delete(
+    "/{variant_id}/permanent",
+)
+def permanently_remove_product_variant(
+    variant_id: int,
+    db: Session = Depends(get_db),
+):
+    return delete_product_variant(
         db=db,
         variant_id=variant_id,
     )
