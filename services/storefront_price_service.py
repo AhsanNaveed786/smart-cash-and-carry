@@ -12,6 +12,7 @@ from models import (
     DiscountCampaign,
     DiscountPrice,
     Product,
+    ProductVariant,
 )
 
 
@@ -117,6 +118,38 @@ def get_normal_product_price(
     }
 
 
+def get_default_variant_price_adjustment(
+    db: Session,
+    product_id: int,
+) -> Decimal:
+    """
+    Get the price adjustment from the product's default active variant.
+    
+    This ensures that when displaying product prices on the storefront,
+    we include the variant's price adjustment which is the actual 
+    selling price the customer will pay.
+    
+    Args:
+        db: Database session
+        product_id: ID of the product
+    
+    Returns:
+        Decimal: The price adjustment of the default variant, or 0.00 if no default variant exists
+    """
+    default_variant = db.scalar(
+        select(ProductVariant).where(
+            ProductVariant.product_id == product_id,
+            ProductVariant.is_default.is_(True),
+            ProductVariant.is_active.is_(True),
+        )
+    )
+
+    if not default_variant:
+        return Decimal("0.00")
+
+    return Decimal(default_variant.price_adjustment)
+
+
 def get_active_product_discount(
     db: Session,
     product_id: int,
@@ -163,6 +196,18 @@ def get_storefront_effective_price(
     product_id: int,
     branch_id: int,
 ) -> dict[str, Any]:
+    """
+    Get the effective price for a product on the storefront.
+    
+    This function calculates the final price a customer will see, including:
+    1. Product master price
+    2. Branch price override (if applicable)
+    3. Default variant price adjustment (NEW FIX)
+    4. Discount campaigns (if active)
+    
+    The fix ensures variant price adjustments are applied consistently
+    between dashboard and product detail views.
+    """
     get_active_storefront_branch(
         db=db,
         branch_id=branch_id,
@@ -179,9 +224,15 @@ def get_storefront_effective_price(
         branch_id=branch_id,
     )
 
-    normal_price = normal_price_data[
-        "normal_price"
-    ]
+    # FIX: Get variant price adjustment and apply it
+    variant_adjustment = get_default_variant_price_adjustment(
+        db=db,
+        product_id=product_id,
+    )
+
+    normal_price = format_price(
+        normal_price_data["normal_price"] + variant_adjustment
+    )
 
     active_discount = get_active_product_discount(
         db=db,
@@ -335,6 +386,23 @@ def get_active_discounted_products(
             for price_override in price_overrides
         }
 
+    # FIX: Also fetch variant adjustments for all products
+    variant_adjustments_by_product_id = {}
+    
+    if product_ids:
+        default_variants = db.scalars(
+            select(ProductVariant).where(
+                ProductVariant.product_id.in_(product_ids),
+                ProductVariant.is_default.is_(True),
+                ProductVariant.is_active.is_(True),
+            )
+        ).all()
+        
+        variant_adjustments_by_product_id = {
+            variant.product_id: Decimal(variant.price_adjustment)
+            for variant in default_variants
+        }
+
     items = []
     included_product_ids: set[int] = set()
 
@@ -366,6 +434,17 @@ def get_active_discounted_products(
                 product.master_price
             )
             normal_price_source = "master"
+
+        # FIX: Apply variant adjustment
+        variant_adjustment = (
+            variant_adjustments_by_product_id.get(
+                product.id,
+                Decimal("0.00")
+            )
+        )
+        normal_price = format_price(
+            normal_price + variant_adjustment
+        )
 
         special_price = format_price(
             discount_price.special_price
