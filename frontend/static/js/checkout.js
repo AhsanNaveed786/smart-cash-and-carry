@@ -5,6 +5,45 @@
     let currentQuote = null;
     let quoting = false;
 
+    const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const PHONE_PATTERN = /^[0-9+()\- ]{7,30}$/;
+
+    function digitsOnlyInput(event) {
+        const input = event.target;
+        // Keep digits and a leading "+" only; strip letters/symbols as the user types.
+        const hasLeadingPlus = input.value.trim().startsWith("+");
+        let cleaned = input.value.replace(/[^0-9]/g, "");
+        if (hasLeadingPlus) cleaned = "+" + cleaned;
+        if (cleaned !== input.value) input.value = cleaned;
+        input.setCustomValidity("");
+    }
+
+    function validatePhone(input) {
+        const value = input.value.trim();
+        if (!value) {
+            input.setCustomValidity("Phone number is required.");
+        } else if (!PHONE_PATTERN.test(value) || !/\d{7,}/.test(value.replace(/[^0-9]/g, ""))) {
+            input.setCustomValidity("Enter a valid phone number using digits only (e.g. 03xx xxxxxxx).");
+        } else {
+            input.setCustomValidity("");
+        }
+        return input.checkValidity();
+    }
+
+    function validateEmail(input) {
+        const value = input.value.trim();
+        if (!value) {
+            input.setCustomValidity("");
+            return true;
+        }
+        if (!EMAIL_PATTERN.test(value)) {
+            input.setCustomValidity("Enter a valid email address (must contain @ and a domain, e.g. name@example.com).");
+        } else {
+            input.setCustomValidity("");
+        }
+        return input.checkValidity();
+    }
+
     function fulfillment() {
         return document.querySelector('input[name="fulfillment_method"]:checked')?.value || "home_delivery";
     }
@@ -99,7 +138,17 @@
     function validateDetails() {
         syncAddressRequirements();
         const form = document.getElementById("checkout-form");
-        if (!form.reportValidity()) return false;
+        const phoneInput = form.querySelector('[name="phone_number"]');
+        const emailInput = form.querySelector('[name="customer_email"]');
+
+        const phoneOk = validatePhone(phoneInput);
+        const emailOk = validateEmail(emailInput);
+
+        if (!form.reportValidity() || !phoneOk || !emailOk) {
+            if (!phoneOk) Store.toast("Phone number must contain only digits (7-30 characters).", "error");
+            else if (!emailOk) Store.toast("Please enter a valid email address (it must contain @).", "error");
+            return false;
+        }
         if (!Store.state.cart.length) {
             Store.toast("Your cart is empty.", "error");
             return false;
@@ -162,5 +211,14 @@
         if (event.target.closest("#whatsapp-order, #whatsapp-order-mobile")) placeWhatsAppOrder();
     });
     document.addEventListener("smart:branch-change", refreshQuote);
-    document.addEventListener("DOMContentLoaded", init);
+    document.addEventListener("DOMContentLoaded", () => {
+        init();
+        const form = document.getElementById("checkout-form");
+        const phoneInput = form?.querySelector('[name="phone_number"]');
+        const emailInput = form?.querySelector('[name="customer_email"]');
+        phoneInput?.addEventListener("input", digitsOnlyInput);
+        phoneInput?.addEventListener("blur", () => validatePhone(phoneInput));
+        emailInput?.addEventListener("input", () => emailInput.setCustomValidity(""));
+        emailInput?.addEventListener("blur", () => validateEmail(emailInput));
+    });
 })();
