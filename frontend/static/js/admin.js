@@ -400,8 +400,8 @@
                             <small>${esc(variant.sku)} · Price: <strong>${API.formatMoney(optionPrice)}</strong> · ${variant.is_active ? "Active" : "Inactive"}</small>
                         </div>
                         <div class="table-actions">
-                            ${variant.is_active ? `<button class="admin-button danger" data-deactivate-variant="${variant.id}:${productId}">Disable</button>` : `<button class="admin-button" data-activate-variant="${variant.id}:${productId}">Enable</button>`}
-                            <button class="admin-button danger" data-delete-variant="${variant.id}:${productId}">Delete</button>
+                            ${variant.is_active ? `<button type="button" data-deactivate-variant="${variant.id}:${productId}">Disable</button>` : `<button type="button" data-activate-variant="${variant.id}:${productId}">Enable</button>`}
+                            <button type="button" class="danger" data-delete-variant="${variant.id}:${productId}">Delete</button>
                         </div>
                     </div>`;
                 }).join("") || empty("No variants yet. Standard base product will be sold.")}

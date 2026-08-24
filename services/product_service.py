@@ -352,16 +352,6 @@ def delete_product(
             "product_id": product_id,
         }
 
-    except IntegrityError:
-        db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=(
-                "Cannot delete this product because it is "
-                "referenced in existing customer orders. "
-                "You can disable it instead."
-            ),
-        )
     except HTTPException:
         db.rollback()
         raise

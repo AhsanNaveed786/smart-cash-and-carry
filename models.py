@@ -2141,19 +2141,19 @@ class OrderItem(Base):
         index=True,
     )
 
-    product_id: Mapped[int] = mapped_column(
+    product_id: Mapped[int | None] = mapped_column(
         ForeignKey(
             "products.id",
-            ondelete="RESTRICT",
+            ondelete="SET NULL",
         ),
-        nullable=False,
+        nullable=True,
         index=True,
     )
 
     variant_id: Mapped[int | None] = mapped_column(
         ForeignKey(
             "product_variants.id",
-            ondelete="RESTRICT",
+            ondelete="SET NULL",
         ),
         nullable=True,
         index=True,

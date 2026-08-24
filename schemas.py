@@ -1453,7 +1453,7 @@ class WhatsAppOrderRequest(OrderCreateRequest):
 
 class OrderItemResponse(SchemaBase):
     id: int
-    product_id: int
+    product_id: int | None
     variant_id: int | None
     product_name: str
     variant_name: str | None
