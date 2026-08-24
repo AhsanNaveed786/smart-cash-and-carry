@@ -16,11 +16,12 @@ from services.excel_price_service import (
     MAXIMUM_FILE_SIZE,
     clean_product_name,
     extract_excel_rows,
+    get_existing_barcodes_set,
     get_products_by_barcodes,
 )
 
 
-CHUNK_SIZE = 5000
+CHUNK_SIZE = 1000
 
 ALLOWED_ROW_STATUSES = {
     "invalid",
@@ -387,7 +388,7 @@ async def create_product_import_preview(
             )
         }
 
-        existing_products = get_products_by_barcodes(
+        existing_barcodes = get_existing_barcodes_set(
             db=db,
             barcodes=database_lookup_barcodes,
         )
@@ -448,7 +449,7 @@ async def create_product_import_preview(
                 )
                 invalid_rows += 1
 
-            elif barcode in existing_products:
+            elif barcode in existing_barcodes:
                 row_status = "already_exists"
                 error_message = (
                     "A product with this barcode already "

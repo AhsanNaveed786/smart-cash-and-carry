@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 import xlrd
 from fastapi import HTTPException, UploadFile, status
 from openpyxl import load_workbook
-from sqlalchemy import func, select
+from sqlalchemy import func, insert, select
 from sqlalchemy.orm import Session, selectinload
 
 from models import (
@@ -300,19 +300,18 @@ def extract_xlsx_rows(
         header_columns = None
 
         for worksheet in workbook.worksheets:
+            row_idx = 0
             for row in worksheet.iter_rows(
                 min_row=1,
-                # Some valid XLSX writers omit the worksheet dimension
-                # metadata. In read-only mode openpyxl then reports
-                # max_row=None, even though the sheet contains rows.
                 max_row=HEADER_SEARCH_ROWS,
+                values_only=True,
             ):
-                values = [cell.value for cell in row]
-                detected = detect_header_columns(values)
+                row_idx += 1
+                detected = detect_header_columns(row)
 
                 if detected:
                     selected_worksheet = worksheet
-                    header_row_number = row[0].row
+                    header_row_number = row_idx
                     header_columns = detected
                     break
 
@@ -346,43 +345,35 @@ def extract_xlsx_rows(
             )
 
         extracted_rows: list[dict[str, Any]] = []
+        barcode_col = header_columns["barcode"]
+        name_col = header_columns["item_name"]
+        price_col = header_columns["price"]
+
+        current_row_number = header_row_number
 
         for row in selected_worksheet.iter_rows(
-            min_row=header_row_number + 1
+            min_row=header_row_number + 1,
+            values_only=True,
         ):
-            barcode_cell = row[header_columns["barcode"]]
-            name_cell = row[header_columns["item_name"]]
-            price_cell = row[header_columns["price"]]
+            current_row_number += 1
+            row_len = len(row)
+            barcode_val = row[barcode_col] if barcode_col < row_len else None
+            name_val = row[name_col] if name_col < row_len else None
+            price_val = row[price_col] if price_col < row_len else None
 
-            values = [
-                barcode_cell.value,
-                name_cell.value,
-                price_cell.value,
-            ]
-
-            if all(
-                value is None or str(value).strip() == ""
-                for value in values
+            if (
+                (barcode_val is None or str(barcode_val).strip() == "")
+                and (name_val is None or str(name_val).strip() == "")
+                and (price_val is None or str(price_val).strip() == "")
             ):
                 continue
 
             extracted_rows.append(
                 {
-                    "excel_row_number": barcode_cell.row,
-                    "barcode": normalize_barcode(
-                        barcode_cell.value,
-                        getattr(
-                            barcode_cell,
-                            "number_format",
-                            None,
-                        ),
-                    ),
-                    "item_name": normalize_item_name(
-                        name_cell.value
-                    ),
-                    "uploaded_price": normalize_price(
-                        price_cell.value
-                    ),
+                    "excel_row_number": current_row_number,
+                    "barcode": normalize_barcode(barcode_val),
+                    "item_name": normalize_item_name(name_val),
+                    "uploaded_price": normalize_price(price_val),
                 }
             )
 
@@ -492,54 +483,33 @@ def extract_xls_rows(
             )
 
         extracted_rows: list[dict[str, Any]] = []
+        barcode_col = header_columns["barcode"]
+        name_col = header_columns["item_name"]
+        price_col = header_columns["price"]
 
         for row_index in range(
             header_row_index + 1,
             selected_sheet.nrows,
         ):
-            barcode_cell = selected_sheet.cell(
-                row_index,
-                header_columns["barcode"],
-            )
+            row_vals = selected_sheet.row_values(row_index)
+            row_len = len(row_vals)
+            barcode_val = row_vals[barcode_col] if barcode_col < row_len else None
+            name_val = row_vals[name_col] if name_col < row_len else None
+            price_val = row_vals[price_col] if price_col < row_len else None
 
-            name_cell = selected_sheet.cell(
-                row_index,
-                header_columns["item_name"],
-            )
-
-            price_cell = selected_sheet.cell(
-                row_index,
-                header_columns["price"],
-            )
-
-            values = [
-                barcode_cell.value,
-                name_cell.value,
-                price_cell.value,
-            ]
-
-            if all(
-                value is None or str(value).strip() == ""
-                for value in values
+            if (
+                (barcode_val is None or str(barcode_val).strip() == "")
+                and (name_val is None or str(name_val).strip() == "")
+                and (price_val is None or str(price_val).strip() == "")
             ):
                 continue
 
             extracted_rows.append(
                 {
                     "excel_row_number": row_index + 1,
-                    "barcode": normalize_barcode(
-                        barcode_cell.value,
-                        get_xls_number_format(
-                            workbook,
-                            barcode_cell,
-                        ),
-                    ),
-                    "item_name": normalize_item_name(
-                        name_cell.value
-                    ),
-                    "uploaded_price": normalize_price(
-                        price_cell.value
-                    ),
+                    "barcode": normalize_barcode(barcode_val),
+                    "item_name": normalize_item_name(name_val),
+                    "uploaded_price": normalize_price(price_val),
                 }
             )
 
@@ -574,6 +544,26 @@ def extract_excel_rows(
         status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
         detail="Only .xlsx and .xls Excel files are supported.",
     )
+
+
+def get_existing_barcodes_set(
+    db: Session,
+    barcodes: set[str],
+) -> set[str]:
+    existing: set[str] = set()
+    barcode_list = list(barcodes)
+    chunk_size = 5000
+
+    for start in range(0, len(barcode_list), chunk_size):
+        chunk = barcode_list[start : start + chunk_size]
+        found = db.scalars(
+            select(Product.barcode).where(
+                Product.barcode.in_(chunk)
+            )
+        ).all()
+        existing.update(found)
+
+    return existing
 
 
 def get_products_by_barcodes(
@@ -736,6 +726,7 @@ async def create_master_price_preview(
         unchanged_rows = 0
         invalid_rows = 0
         new_product_data: list[dict[str, Any]] = []
+        price_row_dicts: list[dict[str, Any]] = []
 
         for extracted_row in extracted_rows:
             barcode = extracted_row["barcode"]
@@ -796,24 +787,26 @@ async def create_master_price_preview(
                         apply_selected = True
                         changed_rows += 1
 
-            import_row = PriceImportRow(
-                batch_id=batch.id,
-                excel_row_number=(
-                    extracted_row["excel_row_number"]
-                ),
-                product_id=(
-                    product.id if product else None
-                ),
-                barcode=barcode,
-                item_name=item_name,
-                current_price=current_price,
-                uploaded_price=uploaded_price,
-                status=row_status,
-                apply_selected=apply_selected,
-                error_message=error_message,
+            price_row_dicts.append(
+                {
+                    "batch_id": batch.id,
+                    "excel_row_number": extracted_row["excel_row_number"],
+                    "product_id": product.id if product else None,
+                    "barcode": barcode,
+                    "item_name": item_name,
+                    "current_price": current_price,
+                    "uploaded_price": uploaded_price,
+                    "status": row_status,
+                    "apply_selected": apply_selected,
+                    "error_message": error_message,
+                }
             )
 
-            db.add(import_row)
+        chunk_size = 1000
+        for i in range(0, len(price_row_dicts), chunk_size):
+            chunk = price_row_dicts[i : i + chunk_size]
+            db.execute(insert(PriceImportRow).values(chunk))
+            db.flush()
 
         if new_product_data:
             product_batch = ProductImportBatch(
@@ -828,30 +821,31 @@ async def create_master_price_preview(
             db.flush()
             batch.product_import_batch_id = product_batch.id
 
-            for product_data in new_product_data:
-                db.add(
-                    ProductImportRow(
-                        batch_id=product_batch.id,
-                        excel_row_number=(
-                            product_data["excel_row_number"]
-                        ),
-                        barcode=product_data["barcode"],
-                        item_name=product_data["item_name"],
-                        uploaded_price=(
-                            product_data["uploaded_price"]
-                        ),
-                        suggested_category_id=None,
-                        suggested_category_name=None,
-                        confirmed_category_id=None,
-                        confirmed_category_name=None,
-                        category_confidence=None,
-                        category_source=None,
-                        ai_reason=None,
-                        status="pending_category",
-                        apply_selected=True,
-                        error_message=None,
-                    )
-                )
+            prod_row_dicts = [
+                {
+                    "batch_id": product_batch.id,
+                    "excel_row_number": product_data["excel_row_number"],
+                    "barcode": product_data["barcode"],
+                    "item_name": product_data["item_name"],
+                    "uploaded_price": product_data["uploaded_price"],
+                    "suggested_category_id": None,
+                    "suggested_category_name": None,
+                    "confirmed_category_id": None,
+                    "confirmed_category_name": None,
+                    "category_confidence": None,
+                    "category_source": None,
+                    "ai_reason": None,
+                    "status": "pending_category",
+                    "apply_selected": True,
+                    "error_message": None,
+                }
+                for product_data in new_product_data
+            ]
+
+            for i in range(0, len(prod_row_dicts), chunk_size):
+                chunk = prod_row_dicts[i : i + chunk_size]
+                db.execute(insert(ProductImportRow).values(chunk))
+                db.flush()
 
         batch.total_rows = len(extracted_rows)
         batch.changed_rows = changed_rows
@@ -1238,6 +1232,7 @@ async def create_branch_price_preview(
         changed_rows = 0
         unchanged_rows = 0
         invalid_rows = 0
+        price_row_dicts: list[dict[str, Any]] = []
 
         for extracted_row in extracted_rows:
             barcode = extracted_row["barcode"]
@@ -1325,24 +1320,26 @@ async def create_branch_price_preview(
                         apply_selected = True
                         changed_rows += 1
 
-            import_row = PriceImportRow(
-                batch_id=batch.id,
-                excel_row_number=(
-                    extracted_row["excel_row_number"]
-                ),
-                product_id=(
-                    product.id if product else None
-                ),
-                barcode=barcode,
-                item_name=item_name,
-                current_price=current_price,
-                uploaded_price=uploaded_price,
-                status=row_status,
-                apply_selected=apply_selected,
-                error_message=error_message,
+            price_row_dicts.append(
+                {
+                    "batch_id": batch.id,
+                    "excel_row_number": extracted_row["excel_row_number"],
+                    "product_id": product.id if product else None,
+                    "barcode": barcode,
+                    "item_name": item_name,
+                    "current_price": current_price,
+                    "uploaded_price": uploaded_price,
+                    "status": row_status,
+                    "apply_selected": apply_selected,
+                    "error_message": error_message,
+                }
             )
 
-            db.add(import_row)
+        chunk_size = 1000
+        for i in range(0, len(price_row_dicts), chunk_size):
+            chunk = price_row_dicts[i : i + chunk_size]
+            db.execute(insert(PriceImportRow).values(chunk))
+            db.flush()
 
         batch.total_rows = len(extracted_rows)
         batch.changed_rows = changed_rows
