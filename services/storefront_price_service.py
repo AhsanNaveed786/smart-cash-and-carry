@@ -198,15 +198,11 @@ def get_storefront_effective_price(
 ) -> dict[str, Any]:
     """
     Get the effective price for a product on the storefront.
-    
-    This function calculates the final price a customer will see, including:
-    1. Product master price
-    2. Branch price override (if applicable)
-    3. Default variant price adjustment (NEW FIX)
-    4. Discount campaigns (if active)
-    
-    The fix ensures variant price adjustments are applied consistently
-    between dashboard and product detail views.
+
+    Returns the raw base price (master_price or branch override + any active
+    discount). Variant price adjustments are NOT included here — they are
+    calculated per-variant in get_storefront_product_variants to avoid
+    double-counting. The shop/listing card shows this base price.
     """
     get_active_storefront_branch(
         db=db,
@@ -224,15 +220,7 @@ def get_storefront_effective_price(
         branch_id=branch_id,
     )
 
-    # FIX: Get variant price adjustment and apply it
-    variant_adjustment = get_default_variant_price_adjustment(
-        db=db,
-        product_id=product_id,
-    )
-
-    normal_price = format_price(
-        normal_price_data["normal_price"] + variant_adjustment
-    )
+    normal_price = format_price(normal_price_data["normal_price"])
 
     active_discount = get_active_product_discount(
         db=db,

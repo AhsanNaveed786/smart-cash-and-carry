@@ -68,6 +68,108 @@ def get_product_variant_by_id(
     return variant
 
 
+import re
+
+
+def determine_base_variant_name(product: Product) -> str:
+    """
+    Determine a clean name for the base product variant option (e.g. '1 Litre', '1kg', '100ml', 'Standard').
+    """
+    if product.unit_size and product.unit_size.strip():
+        return product.unit_size.strip()
+
+    name = (product.name or "").strip()
+    size_match = re.search(
+        r'(\d+(?:\.\d+)?\s*(?:kg|g|l|litre|litres|ml|oz|lb|pack|pcs|pieces))\b',
+        name,
+        re.IGNORECASE,
+    )
+    if size_match:
+        val = size_match.group(1).strip()
+        if val.upper() in ["1L", "1 L"]:
+            return "1 Litre"
+        return val
+
+    for word in ["Small Pack", "Large Pack", "Gift Box", "Set", "Regular", "Standard"]:
+        if word.lower() in name.lower():
+            return word
+
+    return "Standard"
+
+
+def determine_base_variant_sku(db: Session, product: Product) -> str:
+    """
+    Generate a guaranteed unique SKU for the product's base variant option.
+    """
+    raw_base = product.barcode or f"PROD{product.id}"
+    cleaned = re.sub(r'[^A-Za-z0-9_-]', '', raw_base).upper()
+    if not cleaned:
+        cleaned = f"PROD{product.id}"
+
+    candidate = f"{cleaned}-BASE"
+    counter = 1
+    while db.scalar(select(ProductVariant).where(ProductVariant.sku == candidate)) is not None:
+        candidate = f"{cleaned}-BASE-{counter}"
+        counter += 1
+    return candidate
+
+
+def ensure_product_base_variant(db: Session, product_id: int) -> ProductVariant | None:
+    """
+    If a product has active variants but no base variant (price_adjustment == 0),
+    automatically create the base variant representing the original product so the original option
+    is never lost on the storefront.
+    """
+    product = db.get(Product, product_id)
+    if not product:
+        return None
+
+    active_variants = list(
+        db.scalars(
+            select(ProductVariant).where(
+                ProductVariant.product_id == product_id,
+                ProductVariant.is_active.is_(True),
+            ).order_by(ProductVariant.display_order, ProductVariant.id)
+        ).all()
+    )
+
+    if not active_variants:
+        return None
+
+    # Check if a base variant (price_adjustment == 0) already exists
+    has_base = any(Decimal(str(v.price_adjustment)) == Decimal("0.00") for v in active_variants)
+    if has_base:
+        return None
+
+    # No base variant exists! Create it now.
+    base_name = determine_base_variant_name(product)
+    base_sku = determine_base_variant_sku(db=db, product=product)
+
+    # Shift display_order of other variants
+    for v in active_variants:
+        if v.display_order == 0:
+            v.display_order = 1
+
+    has_default = any(v.is_default for v in active_variants)
+
+    base_variant = ProductVariant(
+        product_id=product_id,
+        name=base_name,
+        sku=base_sku,
+        barcode=None,
+        attributes={},
+        price_adjustment=Decimal("0.00"),
+        display_order=0,
+        is_default=not has_default,
+        is_active=True,
+    )
+    db.add(base_variant)
+    db.flush()
+    ensure_product_has_default_variant(db=db, product_id=product_id)
+    db.commit()
+    return base_variant
+
+
 def get_product_variants(
     db: Session,
     product_id: int,
@@ -78,6 +180,9 @@ def get_product_variants(
         product_id=product_id,
         allow_inactive=include_inactive,
     )
+
+    # Auto-ensure base variant exists if variants exist
+    ensure_product_base_variant(db=db, product_id=product_id)
 
     statement = (
         select(ProductVariant)
@@ -328,24 +433,44 @@ def create_product_variant(
     )
 
     try:
-        existing_variant_count = len(
-            get_product_variants(
-                db=db,
+        active_variants = list(
+            db.scalars(
+                select(ProductVariant).where(
+                    ProductVariant.product_id == product_id,
+                    ProductVariant.is_active.is_(True),
+                )
+            ).all()
+        )
+
+        # If this is the FIRST variant being added to a product that currently has 0 active variants:
+        # Automatically create the base variant representing the original product!
+        if len(active_variants) == 0:
+            base_name = determine_base_variant_name(product)
+            base_sku = determine_base_variant_sku(db=db, product=product)
+
+            base_variant = ProductVariant(
                 product_id=product_id,
-                include_inactive=True,
+                name=base_name,
+                sku=base_sku,
+                barcode=None,
+                attributes={},
+                price_adjustment=Decimal("0.00"),
+                display_order=0,
+                is_default=not variant_data.is_default,  # Base is default if new variant is not default
+                is_active=True,
             )
-        )
+            db.add(base_variant)
+            db.flush()
 
-        should_be_default = (
-            variant_data.is_default
-            or existing_variant_count == 0
-        )
-
-        if should_be_default:
+        # If the new variant is marked default, clear existing default
+        if variant_data.is_default:
             clear_existing_default_variant(
                 db=db,
                 product_id=product_id,
             )
+
+        existing_count = len(active_variants)
+        order = variant_data.display_order if variant_data.display_order > 0 else (existing_count + (1 if len(active_variants) == 0 else 0))
 
         variant = ProductVariant(
             product_id=product_id,
@@ -353,17 +478,24 @@ def create_product_variant(
             sku=normalized_sku,
             barcode=normalized_barcode,
             attributes=variant_data.attributes,
-            price_adjustment=(
-                variant_data.price_adjustment
-            ),
-            display_order=(
-                variant_data.display_order
-            ),
-            is_default=should_be_default,
+            price_adjustment=variant_data.price_adjustment,
+            display_order=order,
+            is_default=variant_data.is_default if len(active_variants) > 0 else (variant_data.is_default or False),
             is_active=variant_data.is_active,
         )
 
         db.add(variant)
+        db.flush()
+
+        # Always guarantee a default exists after creation. This handles the
+        # edge case where a new variant is added with is_default=False but
+        # is_active=False — in that case no variant will be default and we
+        # must promote the next eligible one.
+        ensure_product_has_default_variant(
+            db=db,
+            product_id=product_id,
+        )
+
         db.commit()
 
         return get_product_variant_by_id(

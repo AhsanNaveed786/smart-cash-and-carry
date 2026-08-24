@@ -393,35 +393,35 @@
             <p>Base product master price: <strong>${API.formatMoney(masterPrice)}</strong></p>
             <div class="session-list">
                 ${variants.map((variant) => {
-                    const finalPrice = masterPrice + Number(variant.price_adjustment || 0);
+                    const optionPrice = masterPrice + Number(variant.price_adjustment || 0);
                     return `<div class="session-row">
                         <div>
                             <strong>${esc(variant.name)} ${variant.is_default ? '<span class="status-pill active" style="margin-left:6px">Default Option</span>' : ""}</strong>
-                            <small>${esc(variant.sku)} · Price: <strong>${API.formatMoney(finalPrice)}</strong> · ${variant.is_active ? "Active" : "Inactive"}</small>
+                            <small>${esc(variant.sku)} · Price: <strong>${API.formatMoney(optionPrice)}</strong> · ${variant.is_active ? "Active" : "Inactive"}</small>
                         </div>
                         <div class="table-actions">
                             ${variant.is_active ? `<button class="admin-button danger" data-deactivate-variant="${variant.id}:${productId}">Disable</button>` : `<button class="admin-button" data-activate-variant="${variant.id}:${productId}">Enable</button>`}
                             <button class="admin-button danger" data-delete-variant="${variant.id}:${productId}">Delete</button>
                         </div>
                     </div>`;
-                }).join("") || empty("No variants yet. Customers will buy the standard product at base price.")}
+                }).join("") || empty("No variants yet. Standard base product will be sold.")}
             </div>
             <form class="modal-form nested-form" id="variant-create-form" data-product-id="${productId}" data-master-price="${masterPrice}">
-                <h3>Add a variant</h3>
+                <h3>Add a variant / option</h3>
                 <div class="form-row">
-                    <label>Option name<input name="name" required placeholder="e.g. 500g / 1 kg / Large Pack"></label>
-                    <label>SKU<input name="sku" required pattern="[A-Za-z0-9._-]+" placeholder="e.g. SKU-500G"></label>
+                    <label>Option name<input name="name" required placeholder="e.g. 1.5 Litre / 500g / Large Pack"></label>
+                    <label>SKU<input name="sku" required pattern="[A-Za-z0-9._-]+" placeholder="e.g. SKU-150"></label>
                 </div>
                 <div class="form-row">
-                    <label>Variant Final Price (Rs.)
-                        <input type="number" name="variant_price" step="0.01" min="0" required value="${masterPrice}" placeholder="e.g. ${masterPrice}">
+                    <label>Option Price (Rs.)
+                        <input type="number" name="variant_price" step="0.01" min="0" required value="${masterPrice}" placeholder="${masterPrice}">
                     </label>
                     <label class="check-label" style="align-self:end">
-                        <input type="checkbox" name="is_default"> Set as Default Option
+                        <input type="checkbox" name="is_default"> Set as default option
                     </label>
                 </div>
                 <small style="color:var(--muted);margin-top:-6px;display:block">
-                    Enter the exact price customer will pay for this variant (Base price is ${API.formatMoney(masterPrice)}).
+                    Enter the exact price customer will pay for this option.
                 </small>
                 <button class="admin-button primary" type="submit">Add variant</button>
             </form>
@@ -628,21 +628,23 @@
             event.preventDefault();
             const data = formObject(form);
             const masterPrice = Number(form.dataset.masterPrice || 0);
+            const productId = form.dataset.productId;
             const variantPrice = Number(data.variant_price);
             const priceAdjustment = isNaN(variantPrice) ? 0 : (variantPrice - masterPrice);
+            const isDefault = form.is_default ? form.is_default.checked : false;
             try {
-                await API.post(`/api/variants/product/${form.dataset.productId}`, {
+                await API.post(`/api/variants/product/${productId}`, {
                     name: data.name,
                     sku: data.sku,
                     barcode: null,
                     attributes: {},
                     price_adjustment: priceAdjustment,
                     display_order: 0,
-                    is_default: form.is_default.checked,
+                    is_default: isDefault,
                     is_active: true,
                 });
-                toast("Product variant added.");
-                await openVariants(form.dataset.productId);
+                toast("Variant saved.");
+                await openVariants(productId);
             } catch (error) {
                 toast(error.message, "error");
             }

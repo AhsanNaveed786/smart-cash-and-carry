@@ -12,6 +12,7 @@ from services.availability_service import (
 )
 from services.storefront_price_service import get_storefront_effective_price
 from services.variant_service import (
+    ensure_product_base_variant,
     get_product_variant_by_id,
     get_variant_product,
 )
@@ -180,6 +181,9 @@ def get_storefront_product_variants(
         branch_id=branch_id,
     )
 
+    # Ensure the original base option exists if variants are configured
+    ensure_product_base_variant(db=db, product_id=product_id)
+
     variants = list(
         db.scalars(
             select(ProductVariant)
@@ -220,7 +224,14 @@ def get_storefront_product_variants(
     if not general_image_urls and product.image_url:
         general_image_urls = [product.image_url]
 
-    base_effective_price = money(price_data["effective_price"])
+    # ALWAYS use master_price as the base for variant final price calculation.
+    # Admin enters an absolute price (e.g. Rs. 705).  We store it internally as
+    # price_adjustment = 705 - master_price.  Displaying it back:
+    #   master_price + price_adjustment = master_price + (705 - master_price) = 705
+    # This guarantees: whatever price admin sets → customer sees that exact price.
+    # Branch overrides do NOT shift variant prices — they only affect the
+    # product-level (no-variant) price shown on the listing card.
+    master_price = money(Decimal(price_data["master_price"]))
     items = []
 
     for variant in variants:
@@ -237,7 +248,7 @@ def get_storefront_product_variants(
             stock_message = stock_record.stock_message
 
         final_price = money(
-            base_effective_price + Decimal(variant.price_adjustment)
+            master_price + Decimal(variant.price_adjustment)
         )
         if final_price < 0:
             final_price = Decimal("0.00")
@@ -259,7 +270,7 @@ def get_storefront_product_variants(
                 "barcode": variant.barcode,
                 "attributes": variant.attributes,
                 "price_adjustment": money(variant.price_adjustment),
-                "base_effective_price": base_effective_price,
+                "base_effective_price": master_price,
                 "effective_price": final_price,
                 "is_default": variant.is_default,
                 "is_in_stock": is_in_stock,
