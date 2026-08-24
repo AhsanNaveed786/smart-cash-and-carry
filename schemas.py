@@ -571,6 +571,23 @@ class ProductCategorizationRunResponse(SchemaBase):
     categorized_rows: int
     batch_status: str
 
+
+class ProductImportQuickCategorizeResponse(SchemaBase):
+    batch_id: int
+    matched_rows: int
+    remaining_rows: int
+    categorized_rows: int | None = None
+    batch_status: str | None = None
+    message: str
+
+
+class ProductImportBulkAssignRequest(SchemaBase):
+    category_id: int | None = None
+    category_name: str | None = None
+    include_ai_categorized: bool = False
+    target_scope: str = "pending"
+
+
 class ProductImportConfirmAllRequest(SchemaBase):
     confirm: Literal[True]
 
@@ -596,6 +613,8 @@ class ProductImportReviewSummary(SchemaBase):
 
 class ProductImportApplyRequest(SchemaBase):
     confirm: Literal[True]
+    fallback_category_id: int | None = None
+    auto_assign_default: bool = False
 
 
 class ProductImportApplyResponse(SchemaBase):

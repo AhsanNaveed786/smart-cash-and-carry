@@ -1,13 +1,17 @@
 from datetime import datetime, timezone
 
 from fastapi import HTTPException, status
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, insert, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from models import Category, Product, ProductImportBatch, ProductImportRow
 from services.category_service import generate_unique_slug
-from services.product_service import generate_unique_product_slug
+from services.excel_price_service import clean_product_name
+from services.product_service import bulk_generate_product_slugs
+
+
+CHUNK_SIZE = 5000
 
 
 def _resolve_new_categories(
@@ -78,6 +82,8 @@ def apply_product_import(
     db: Session,
     batch_id: int,
     commit_changes: bool = True,
+    fallback_category_id: int | None = None,
+    auto_assign_default: bool = False,
 ) -> dict:
     try:
         batch = db.scalar(
@@ -101,6 +107,46 @@ def apply_product_import(
                 detail="This product import cannot be applied.",
             )
 
+        # If fallback category or auto-assign is requested, resolve fallback category
+        resolved_fallback_id = fallback_category_id
+        if auto_assign_default and resolved_fallback_id is None:
+            first_active_cat = db.scalar(
+                select(Category.id)
+                .where(Category.is_active.is_(True), Category.slug != "deals")
+                .order_by(Category.display_order, Category.id)
+            )
+            if not first_active_cat:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="No active product category exists to assign as default.",
+                )
+            resolved_fallback_id = first_active_cat
+
+        if resolved_fallback_id is not None:
+            # Assign fallback category to any selected row missing category
+            db.execute(
+                update(ProductImportRow)
+                .where(
+                    ProductImportRow.batch_id == batch_id,
+                    ProductImportRow.apply_selected.is_(True),
+                    or_(
+                        ProductImportRow.status == "pending_category",
+                        (
+                            (ProductImportRow.status == "ready")
+                            & ProductImportRow.confirmed_category_id.is_(None)
+                            & ProductImportRow.confirmed_category_name.is_(None)
+                        ),
+                    ),
+                )
+                .values(
+                    confirmed_category_id=resolved_fallback_id,
+                    confirmed_category_name=None,
+                    status="ready",
+                    category_source="manual",
+                )
+            )
+            db.flush()
+
         selected_pending = db.scalar(
             select(func.count(ProductImportRow.id)).where(
                 ProductImportRow.batch_id == batch_id,
@@ -121,7 +167,8 @@ def apply_product_import(
                 detail={
                     "message": (
                         "Every selected product must have a reviewed "
-                        "category before final confirmation."
+                        "category before final confirmation. You can use 'Quick Auto-Categorize' "
+                        "or assign a default category to remaining rows."
                     ),
                     "remaining_selected_rows": selected_pending,
                 },
@@ -139,6 +186,13 @@ def apply_product_import(
                 .with_for_update()
             ).all()
         )
+
+        if not selected_rows:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No reviewable products are selected for import.",
+            )
+
         incomplete_rows = [
             row.excel_row_number
             for row in selected_rows
@@ -168,27 +222,30 @@ def apply_product_import(
                 detail="Selected rows contain duplicate barcodes.",
             )
         if selected_barcodes:
-            existing_products = list(
-                db.scalars(
-                    select(Product)
-                    .where(Product.barcode.in_(selected_barcodes))
-                    .with_for_update()
-                ).all()
-            )
-            if existing_products:
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail={
-                        "message": (
-                            "Some products were added after preview. "
-                            "Create a fresh preview."
-                        ),
-                        "existing_barcodes": [
-                            product.barcode
-                            for product in existing_products[:50]
-                        ],
-                    },
+            # Check existing barcodes in chunks for large lists
+            for i in range(0, len(selected_barcodes), CHUNK_SIZE):
+                chunk_barcodes = selected_barcodes[i : i + CHUNK_SIZE]
+                existing_products = list(
+                    db.scalars(
+                        select(Product)
+                        .where(Product.barcode.in_(chunk_barcodes))
+                        .with_for_update()
+                    ).all()
                 )
+                if existing_products:
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail={
+                            "message": (
+                                "Some products were added after preview. "
+                                "Create a fresh preview."
+                            ),
+                            "existing_barcodes": [
+                                product.barcode
+                                for product in existing_products[:50]
+                            ],
+                        },
+                    )
 
         created_categories = _resolve_new_categories(db, selected_rows)
         category_ids = {
@@ -213,42 +270,65 @@ def apply_product_import(
                 detail="A confirmed category is missing or inactive.",
             )
 
-        for import_row in selected_rows:
-            product_name = import_row.item_name.strip()
-            db.add(
-                Product(
-                    barcode=import_row.barcode.strip(),
-                    name=product_name,
-                    slug=generate_unique_product_slug(db, product_name),
-                    description=None,
-                    unit_size=None,
-                    master_price=import_row.uploaded_price,
-                    image_url=None,
-                    category_id=import_row.confirmed_category_id,
-                    is_active=True,
-                )
+        # High-Speed in-memory slug generation (O(1) lookups for 55k+ rows)
+        existing_slugs = set(db.scalars(select(Product.slug)).all())
+        product_names = [clean_product_name(row.item_name) for row in selected_rows]
+        slugs = bulk_generate_product_slugs(product_names, existing_slugs)
+
+        # Chunked bulk insertion of Product records (5000 rows/chunk)
+        now_dt = datetime.now(timezone.utc)
+        product_records = []
+        for idx, import_row in enumerate(selected_rows):
+            product_records.append({
+                "barcode": import_row.barcode.strip(),
+                "name": clean_product_name(import_row.item_name),
+                "slug": slugs[idx],
+                "description": None,
+                "unit_size": None,
+                "master_price": import_row.uploaded_price,
+                "image_url": None,
+                "category_id": import_row.confirmed_category_id,
+                "is_active": True,
+                "created_at": now_dt,
+                "updated_at": now_dt,
+            })
+
+        for i in range(0, len(product_records), CHUNK_SIZE):
+            chunk = product_records[i : i + CHUNK_SIZE]
+            db.execute(insert(Product).values(chunk))
+            db.flush()
+
+        # Chunked bulk update of applied ProductImportRow statuses
+        selected_row_ids = [row.id for row in selected_rows]
+        for i in range(0, len(selected_row_ids), CHUNK_SIZE):
+            chunk_ids = selected_row_ids[i : i + CHUNK_SIZE]
+            db.execute(
+                update(ProductImportRow)
+                .where(ProductImportRow.id.in_(chunk_ids))
+                .values(status="applied")
             )
-            import_row.status = "applied"
 
-        unselected_rows = list(
-            db.scalars(
-                select(ProductImportRow)
-                .where(
-                    ProductImportRow.batch_id == batch_id,
-                    ProductImportRow.status.in_(
-                        {"pending_category", "ready"}
-                    ),
-                    ProductImportRow.apply_selected.is_(False),
-                )
-                .with_for_update()
-            ).all()
+        # Bulk update unselected rows to skipped
+        skipped_count = db.scalar(
+            select(func.count(ProductImportRow.id)).where(
+                ProductImportRow.batch_id == batch_id,
+                ProductImportRow.status.in_({"pending_category", "ready"}),
+                ProductImportRow.apply_selected.is_(False),
+            )
+        ) or 0
+
+        db.execute(
+            update(ProductImportRow)
+            .where(
+                ProductImportRow.batch_id == batch_id,
+                ProductImportRow.status.in_({"pending_category", "ready"}),
+                ProductImportRow.apply_selected.is_(False),
+            )
+            .values(status="skipped")
         )
-        for import_row in unselected_rows:
-            import_row.status = "skipped"
 
-        applied_at = datetime.now(timezone.utc)
         batch.status = "applied"
-        batch.applied_at = applied_at
+        batch.applied_at = now_dt
 
         if commit_changes:
             db.commit()
@@ -260,8 +340,8 @@ def apply_product_import(
             "status": batch.status,
             "created_products": len(selected_rows),
             "created_categories": created_categories,
-            "skipped_rows": len(unselected_rows),
-            "applied_at": applied_at,
+            "skipped_rows": skipped_count,
+            "applied_at": now_dt,
         }
     except HTTPException:
         db.rollback()

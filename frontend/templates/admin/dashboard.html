@@ -35,7 +35,7 @@
                     <span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span>
                     Products &amp; prices
                 </button>
-                <button data-section="catalog" data-super-only>
+                <button data-section="catalog" data-permission="products.read">
                     <span class="nav-icon"><svg viewBox="0 0 24 24"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg></span>
                     Catalog &amp; branches
                 </button>
@@ -261,9 +261,29 @@
                             <label class="grow">Search products
                                 <input name="search" id="catalog-search-input" placeholder="Live search: name or barcode…">
                             </label>
+                            <label>Category
+                                <select name="category_id" id="catalog-category-filter">
+                                    <option value="">All categories</option>
+                                </select>
+                            </label>
                             <button class="admin-button secondary" type="submit">Search</button>
-                            <button class="admin-button danger" id="bulk-disable-products" type="button" disabled>Disable selected (0)</button>
+                            <button class="admin-button secondary" id="catalog-select-all-btn" type="button">Select all across catalog</button>
+                            <select id="bulk-move-category-select" class="admin-select" style="max-width:180px;font-size:0.85rem;" disabled>
+                                <option value="">Move to Category...</option>
+                            </select>
+                            <button class="admin-button" id="bulk-move-category-btn" type="button" disabled>Move (0)</button>
+                            <button class="admin-button" id="bulk-enable-products" type="button" disabled>Enable (0)</button>
+                            <button class="admin-button danger" id="bulk-disable-products" type="button" disabled>Disable (0)</button>
+                            <button class="admin-button danger" id="bulk-delete-products" type="button" data-super-only disabled>Delete selected (0)</button>
+                            <button class="admin-button danger" id="delete-all-products" type="button" data-super-only style="background:#7f1d1d;border-color:#991b1b;color:#fff;">🗑 Delete all</button>
                         </form>
+                        <div id="catalog-selection-banner" class="catalog-selection-banner" style="display:none;background:rgba(14,165,233,0.1);border:1px solid rgba(14,165,233,0.3);padding:10px 16px;border-radius:8px;margin-bottom:16px;align-items:center;justify-content:space-between;gap:12px;display:none;">
+                            <span id="catalog-selection-banner-text">All products on this page are selected.</span>
+                            <div style="display:flex;gap:8px;">
+                                <button type="button" class="admin-button secondary mini-btn" id="catalog-banner-select-all">Select all <span id="catalog-banner-total">0</span> products in catalog</button>
+                                <button type="button" class="admin-button mini-btn" id="catalog-banner-clear">Clear selection</button>
+                            </div>
+                        </div>
                         <div id="catalog-products" class="table-wrap"></div>
                         <div class="pagination" id="catalog-products-pagination"></div>
                     </section>

@@ -1,9 +1,10 @@
+from typing import Any
 from fastapi import APIRouter, Depends, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from database import get_db
-from dependencies.admin_access import require_current_admin
+from dependencies.admin_access import require_current_admin, require_super_admin
 from models import Admin
 from schemas import (
     ProductCreate,
@@ -13,28 +14,42 @@ from schemas import (
 )
 from services.product_service import (
     activate_product,
+    bulk_activate_products,
     bulk_deactivate_products,
+    bulk_delete_products,
+    bulk_move_products_category,
     create_product,
     deactivate_product,
+    delete_all_products,
     delete_product,
     get_all_products,
     get_product_by_barcode,
     get_product_by_id,
+    sanitize_existing_product_names,
     update_product,
 )
 
 
+class ProductBulkActionRequest(BaseModel):
+    product_ids: list[int] = Field(default_factory=list)
+    select_all: bool = False
+    search: str | None = None
+    category_id: int | None = None
+
+
 class ProductBulkDeactivateRequest(BaseModel):
-    product_ids: list[int] = Field(
-        min_length=1,
-        max_length=500,
-    )
+    product_ids: list[int] = Field(default_factory=list)
+    select_all: bool = False
+    search: str | None = None
+    category_id: int | None = None
 
 
-class ProductBulkDeactivateResponse(BaseModel):
-    requested_count: int
-    deactivated_count: int
-    product_ids: list[int]
+class ProductBulkMoveCategoryRequest(BaseModel):
+    product_ids: list[int] = Field(default_factory=list)
+    select_all: bool = False
+    search: str | None = None
+    category_id: int | None = None
+    target_category_id: int = Field(gt=0)
 
 
 router = APIRouter(
@@ -86,9 +101,52 @@ def get_product_using_barcode(
     )
 
 
+@router.delete(
+    "/delete-all",
+)
+def remove_all_products(
+    db: Session = Depends(get_db),
+    _admin: Admin = Depends(require_super_admin),
+):
+    return delete_all_products(db=db)
+
+
+@router.post(
+    "/bulk-delete",
+)
+def bulk_remove_products_permanently(
+    request_data: ProductBulkActionRequest,
+    db: Session = Depends(get_db),
+    _admin: Admin = Depends(require_super_admin),
+):
+    return bulk_delete_products(
+        db=db,
+        product_ids=request_data.product_ids,
+        select_all=request_data.select_all,
+        search=request_data.search,
+        category_id=request_data.category_id,
+    )
+
+
+@router.post(
+    "/bulk-activate",
+)
+def bulk_enable_products(
+    request_data: ProductBulkActionRequest,
+    db: Session = Depends(get_db),
+    _admin: Admin = Depends(require_current_admin),
+):
+    return bulk_activate_products(
+        db=db,
+        product_ids=request_data.product_ids,
+        select_all=request_data.select_all,
+        search=request_data.search,
+        category_id=request_data.category_id,
+    )
+
+
 @router.post(
     "/bulk-deactivate",
-    response_model=ProductBulkDeactivateResponse,
 )
 def bulk_remove_products(
     request_data: ProductBulkDeactivateRequest,
@@ -98,7 +156,38 @@ def bulk_remove_products(
     return bulk_deactivate_products(
         db=db,
         product_ids=request_data.product_ids,
+        select_all=request_data.select_all,
+        search=request_data.search,
+        category_id=request_data.category_id,
     )
+
+
+@router.post(
+    "/bulk-move-category",
+)
+def bulk_move_category_endpoint(
+    request_data: ProductBulkMoveCategoryRequest,
+    db: Session = Depends(get_db),
+    _admin: Admin = Depends(require_current_admin),
+):
+    return bulk_move_products_category(
+        db=db,
+        target_category_id=request_data.target_category_id,
+        product_ids=request_data.product_ids,
+        select_all=request_data.select_all,
+        search=request_data.search,
+        category_id=request_data.category_id,
+    )
+
+
+@router.post(
+    "/sanitize-names",
+)
+def sanitize_names_endpoint(
+    db: Session = Depends(get_db),
+    _admin: Admin = Depends(require_super_admin),
+):
+    return sanitize_existing_product_names(db=db)
 
 
 @router.get(

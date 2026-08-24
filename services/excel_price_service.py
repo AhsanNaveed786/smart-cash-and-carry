@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from models import (
     BranchPriceOverride,
+    Category,
     PriceImportBatch,
     PriceImportRow,
     Product,
@@ -44,6 +45,7 @@ HEADER_ALIASES = {
         "code",
         "sku",
         "skucode",
+        "item_code",
     },
     "item_name": {
         "itemname",
@@ -54,6 +56,9 @@ HEADER_ALIASES = {
         "itemdescription",
         "itemdiscription",
         "productdescription",
+        "item_name",
+        "product_name",
+        "title",
     },
     "price": {
         "price",
@@ -63,6 +68,8 @@ HEADER_ALIASES = {
         "retailprice",
         "unitprice",
         "rate",
+        "sale_price",
+        "masterprice",
     },
 }
 
@@ -148,11 +155,32 @@ def normalize_barcode(
     return barcode
 
 
+def clean_product_name(value: Any) -> str:
+    """
+    Enhances product names by removing leading numerical digits, sequence counters,
+    and associated separators (e.g. '001 candle light' -> 'candle light',
+    '12 BABY GLASS' -> 'BABY GLASS', '005 - Lipton Tea' -> 'Lipton Tea').
+    If the name consists entirely of digits, the stripped original is preserved.
+    """
+    if value is None:
+        return ""
+
+    text = str(value).strip()
+    if not text:
+        return ""
+
+    cleaned = re.sub(r"^\d+[\s\.\-_/:]*\s*", "", text).strip()
+    if not cleaned:
+        return text
+
+    return cleaned
+
+
 def normalize_item_name(value: Any) -> str | None:
     if value is None:
         return None
 
-    item_name = str(value).strip()
+    item_name = clean_product_name(value)
 
     if not item_name or len(item_name) > 255:
         return None
@@ -192,6 +220,21 @@ def normalize_price(value: Any) -> Decimal | None:
         TWO_DECIMAL_PLACES,
         rounding=ROUND_HALF_UP,
     )
+
+
+def normalize_category_name(value: Any) -> str | None:
+    if value is None or isinstance(value, bool):
+        return None
+
+    text = str(value).strip()
+    if not text:
+        return None
+
+    cleaned = " ".join(text.split())
+    if not cleaned or len(cleaned) < 2:
+        return None
+
+    return cleaned[:120]
 
 
 def validate_xlsx_archive(file_content: bytes) -> None:

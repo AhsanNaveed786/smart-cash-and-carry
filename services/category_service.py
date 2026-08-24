@@ -1,4 +1,5 @@
 import re
+from typing import Any
 import unicodedata
 
 from fastapi import HTTPException, status
@@ -198,3 +199,127 @@ def deactivate_category(
     db.refresh(category)
 
     return category
+
+
+def delete_category(
+    db: Session,
+    category_id: int,
+) -> dict[str, Any]:
+    from models import (
+        BranchPriceOverride,
+        DiscountPrice,
+        OrderItem,
+        PriceImportRow,
+        Product,
+        ProductAvailability,
+        ProductImage,
+        ProductImportRow,
+        ProductVariant,
+        VariantAvailability,
+    )
+    from sqlalchemy import delete, update
+
+    category = get_category_by_id(
+        db=db,
+        category_id=category_id,
+    )
+
+    if category.slug == "deals":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="The system 'deals' category cannot be deleted.",
+        )
+
+    try:
+        product_ids = list(
+            db.scalars(
+                select(Product.id).where(Product.category_id == category_id)
+            ).all()
+        )
+
+        if product_ids:
+            CHUNK = 1000
+            for i in range(0, len(product_ids), CHUNK):
+                chunk = product_ids[i : i + CHUNK]
+                # Nullify foreign keys in historical order items and price import rows
+                db.execute(
+                    update(OrderItem)
+                    .where(OrderItem.product_id.in_(chunk))
+                    .values(product_id=None, variant_id=None)
+                )
+                db.execute(
+                    update(PriceImportRow)
+                    .where(PriceImportRow.product_id.in_(chunk))
+                    .values(product_id=None)
+                )
+                var_ids = list(
+                    db.scalars(
+                        select(ProductVariant.id).where(
+                            ProductVariant.product_id.in_(chunk)
+                        )
+                    ).all()
+                )
+                if var_ids:
+                    db.execute(
+                        delete(VariantAvailability).where(
+                            VariantAvailability.variant_id.in_(var_ids)
+                        )
+                    )
+                db.execute(
+                    delete(BranchPriceOverride).where(
+                        BranchPriceOverride.product_id.in_(chunk)
+                    )
+                )
+                db.execute(
+                    delete(ProductAvailability).where(
+                        ProductAvailability.product_id.in_(chunk)
+                    )
+                )
+                db.execute(
+                    delete(DiscountPrice).where(
+                        DiscountPrice.product_id.in_(chunk)
+                    )
+                )
+                db.execute(
+                    delete(ProductImage).where(
+                        ProductImage.product_id.in_(chunk)
+                    )
+                )
+                db.execute(
+                    delete(ProductVariant).where(
+                        ProductVariant.product_id.in_(chunk)
+                    )
+                )
+                db.execute(
+                    delete(Product).where(Product.id.in_(chunk))
+                )
+                db.flush()
+
+        # Update any pending import rows referencing this category
+        db.execute(
+            update(ProductImportRow)
+            .where(ProductImportRow.confirmed_category_id == category_id)
+            .values(confirmed_category_id=None, status="pending_category")
+        )
+        db.execute(
+            update(ProductImportRow)
+            .where(ProductImportRow.suggested_category_id == category_id)
+            .values(suggested_category_id=None, status="pending_category")
+        )
+
+        category_name = category.name
+        db.delete(category)
+        db.commit()
+
+        return {
+            "message": f"Category '{category_name}' and {len(product_ids)} associated product(s) deleted permanently.",
+            "category_id": category_id,
+            "category_name": category_name,
+            "deleted_products_count": len(product_ids),
+        }
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception:
+        db.rollback()
+        raise

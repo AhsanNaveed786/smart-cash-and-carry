@@ -1,21 +1,26 @@
 from collections import Counter
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
 from fastapi import HTTPException, UploadFile, status
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import func, insert, or_, select, update
 from sqlalchemy.orm import Session
 
 from models import (
+    Category,
     ProductImportBatch,
     ProductImportRow,
 )
 from services.excel_price_service import (
     MAXIMUM_FILE_SIZE,
+    clean_product_name,
     extract_excel_rows,
     get_products_by_barcodes,
 )
 
+
+CHUNK_SIZE = 5000
 
 ALLOWED_ROW_STATUSES = {
     "invalid",
@@ -170,6 +175,75 @@ def update_all_product_import_row_selection(
             ),
         )
         .values(apply_selected=apply_selected)
+    )
+    db.commit()
+
+    return get_product_import_review_summary(db, batch_id)
+
+
+def bulk_assign_category_to_pending(
+    db: Session,
+    batch_id: int,
+    category_id: int | None = None,
+    category_name: str | None = None,
+    include_ai_categorized: bool = False,
+    target_scope: str = "pending",
+) -> dict[str, Any]:
+    batch = get_product_import_batch(db, batch_id)
+
+    if batch.status in {"applied", "cancelled", "failed"}:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This product import can no longer be edited.",
+        )
+
+    if category_id is not None:
+        category = db.get(Category, category_id)
+        if not category or not category.is_active or category.slug == "deals":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Select an active normal product category.",
+            )
+        assigned_id = category.id
+        assigned_name = None
+    elif category_name:
+        assigned_id = None
+        assigned_name = " ".join(category_name.strip().split())
+        if not 2 <= len(assigned_name) <= 120:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="New category name must contain 2 to 120 characters.",
+            )
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Provide either category_id or category_name.",
+        )
+
+    filters = [
+        ProductImportRow.batch_id == batch_id,
+    ]
+
+    if target_scope == "all" or include_ai_categorized:
+        filters.append(ProductImportRow.status.in_({"pending_category", "ready"}))
+    elif target_scope == "all_selected":
+        filters.append(ProductImportRow.status.in_({"pending_category", "ready"}))
+        filters.append(ProductImportRow.apply_selected.is_(True))
+    else:
+        # Default "pending"
+        filters.append(ProductImportRow.status == "pending_category")
+
+    db.execute(
+        update(ProductImportRow)
+        .where(*filters)
+        .values(
+            confirmed_category_id=assigned_id,
+            confirmed_category_name=assigned_name,
+            status="ready",
+            apply_selected=True,
+            category_source="manual",
+            error_message=None,
+        )
     )
     db.commit()
 
@@ -332,6 +406,7 @@ async def create_product_import_preview(
 
         valid_rows = 0
         invalid_rows = 0
+        row_dicts: list[dict[str, Any]] = []
 
         for extracted_row in extracted_rows:
             barcode = extracted_row["barcode"]
@@ -385,27 +460,29 @@ async def create_product_import_preview(
                 row_status = "pending_category"
                 valid_rows += 1
 
-            import_row = ProductImportRow(
-                batch_id=batch.id,
-                excel_row_number=(
-                    extracted_row["excel_row_number"]
-                ),
-                barcode=barcode,
-                item_name=item_name,
-                uploaded_price=uploaded_price,
-                suggested_category_id=None,
-                confirmed_category_id=None,
-                category_confidence=None,
-                category_source=None,
-                ai_reason=None,
-                status=row_status,
-                apply_selected=(
-                    row_status == "pending_category"
-                ),
-                error_message=error_message,
-            )
+            row_dicts.append({
+                "batch_id": batch.id,
+                "excel_row_number": extracted_row["excel_row_number"],
+                "barcode": barcode,
+                "item_name": item_name,
+                "uploaded_price": uploaded_price,
+                "suggested_category_id": None,
+                "suggested_category_name": None,
+                "confirmed_category_id": None,
+                "confirmed_category_name": None,
+                "category_confidence": None,
+                "category_source": None,
+                "ai_reason": None,
+                "status": row_status,
+                "apply_selected": (row_status == "pending_category"),
+                "error_message": error_message,
+            })
 
-            db.add(import_row)
+        # High-Speed chunked bulk insert for 55k+ rows
+        for i in range(0, len(row_dicts), CHUNK_SIZE):
+            chunk = row_dicts[i : i + CHUNK_SIZE]
+            db.execute(insert(ProductImportRow).values(chunk))
+            db.flush()
 
         batch.valid_rows = valid_rows
         batch.invalid_rows = invalid_rows

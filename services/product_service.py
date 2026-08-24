@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from models import Category, Product
 from schemas import ProductCreate, ProductUpdate
+from services.excel_price_service import clean_product_name
 
 
 def generate_product_slug(value: str) -> str:
@@ -52,6 +53,31 @@ def generate_unique_product_slug(
 
         slug = f"{base_slug}-{counter}"
         counter += 1
+
+
+def bulk_generate_product_slugs(
+    names: list[str],
+    existing_slugs: set[str],
+) -> list[str]:
+    """
+    Generates unique product slugs in memory for large batches (55k+ items)
+    in milliseconds without issuing individual database queries.
+    """
+    generated_slugs: list[str] = []
+
+    for name in names:
+        base_slug = generate_product_slug(name)
+        candidate = base_slug
+        counter = 2
+
+        while candidate in existing_slugs:
+            candidate = f"{base_slug}-{counter}"
+            counter += 1
+
+        existing_slugs.add(candidate)
+        generated_slugs.append(candidate)
+
+    return generated_slugs
 
 
 def get_category_or_404(
@@ -168,7 +194,7 @@ def create_product(
     product_data: ProductCreate,
 ) -> Product:
     normalized_barcode = product_data.barcode.strip()
-    normalized_name = product_data.name.strip()
+    normalized_name = clean_product_name(product_data.name)
 
     existing_product = db.scalar(
         select(Product).where(
@@ -248,7 +274,7 @@ def update_product(
         "name" in update_data
         and update_data["name"] is not None
     ):
-        normalized_name = update_data["name"].strip()
+        normalized_name = " ".join(update_data["name"].strip().split())
 
         product.name = normalized_name
         product.slug = generate_unique_product_slug(
@@ -338,12 +364,46 @@ def delete_product(
     db: Session,
     product_id: int,
 ) -> dict[str, Any]:
+    from models import (
+        BranchPriceOverride,
+        DiscountPrice,
+        OrderItem,
+        PriceImportRow,
+        ProductAvailability,
+        ProductImage,
+        ProductVariant,
+        VariantAvailability,
+    )
+    from sqlalchemy import delete, update
+
     product = get_product_by_id(
         db=db,
         product_id=product_id,
     )
 
     try:
+        # Nullify foreign keys in historical order items and price import rows
+        db.execute(
+            update(OrderItem)
+            .where(OrderItem.product_id == product_id)
+            .values(product_id=None, variant_id=None)
+        )
+        db.execute(
+            update(PriceImportRow)
+            .where(PriceImportRow.product_id == product_id)
+            .values(product_id=None)
+        )
+
+        # Delete dependent tables
+        var_ids = list(db.scalars(select(ProductVariant.id).where(ProductVariant.product_id == product_id)).all())
+        if var_ids:
+            db.execute(delete(VariantAvailability).where(VariantAvailability.variant_id.in_(var_ids)))
+        db.execute(delete(BranchPriceOverride).where(BranchPriceOverride.product_id == product_id))
+        db.execute(delete(ProductAvailability).where(ProductAvailability.product_id == product_id))
+        db.execute(delete(DiscountPrice).where(DiscountPrice.product_id == product_id))
+        db.execute(delete(ProductImage).where(ProductImage.product_id == product_id))
+        db.execute(delete(ProductVariant).where(ProductVariant.product_id == product_id))
+
         db.delete(product)
         db.commit()
 
@@ -360,51 +420,274 @@ def delete_product(
         raise
 
 
-def bulk_deactivate_products(
-    db: Session,
-    product_ids: list[int],
-) -> dict[str, Any]:
-    unique_product_ids = list(dict.fromkeys(product_ids))
-
-    products = list(
-        db.scalars(
-            select(Product).where(
-                Product.id.in_(unique_product_ids)
-            )
-        ).all()
+def delete_all_products(db: Session) -> dict[str, Any]:
+    """
+    Permanently deletes all products from the store catalog,
+    cleaning up price overrides, availability records, variants,
+    images, and discount prices while preserving orders by setting
+    order items' product reference to NULL.
+    """
+    from models import (
+        BranchPriceOverride,
+        DiscountPrice,
+        OrderItem,
+        PriceImportRow,
+        ProductAvailability,
+        ProductImage,
+        ProductVariant,
+        VariantAvailability,
     )
+    from sqlalchemy import delete, update
 
-    found_product_ids = {
-        product.id
-        for product in products
-    }
+    try:
+        total_products = db.scalar(select(func.count(Product.id))) or 0
+        if total_products == 0:
+            return {
+                "message": "Catalog is already empty.",
+                "deleted_count": 0,
+            }
 
-    missing_product_ids = [
-        product_id
-        for product_id in unique_product_ids
-        if product_id not in found_product_ids
-    ]
-
-    if missing_product_ids:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={
-                "message": "One or more products were not found.",
-                "missing_product_ids": missing_product_ids,
-            },
+        # Nullify foreign keys in historical order items and price import rows
+        db.execute(
+            update(OrderItem)
+            .where(OrderItem.product_id.is_not(None))
+            .values(product_id=None, variant_id=None)
+        )
+        db.execute(
+            update(PriceImportRow)
+            .where(PriceImportRow.product_id.is_not(None))
+            .values(product_id=None)
         )
 
-    deactivated_product_ids: list[int] = []
+        # Delete dependent tables
+        db.execute(delete(VariantAvailability))
+        db.execute(delete(BranchPriceOverride))
+        db.execute(delete(ProductAvailability))
+        db.execute(delete(DiscountPrice))
+        db.execute(delete(ProductImage))
+        db.execute(delete(ProductVariant))
 
-    for product in products:
-        if product.is_active:
-            product.is_active = False
-            deactivated_product_ids.append(product.id)
+        # Delete all products
+        db.execute(delete(Product))
+        db.commit()
 
-    db.commit()
+        return {
+            "message": f"Successfully deleted all {total_products} products from the catalog.",
+            "deleted_count": total_products,
+        }
+    except Exception:
+        db.rollback()
+        raise
+
+
+def bulk_delete_products(
+    db: Session,
+    product_ids: list[int] | None = None,
+    select_all: bool = False,
+    search: str | None = None,
+    category_id: int | None = None,
+) -> dict[str, Any]:
+    from models import (
+        BranchPriceOverride,
+        DiscountPrice,
+        OrderItem,
+        PriceImportRow,
+        ProductAvailability,
+        ProductImage,
+        ProductVariant,
+        VariantAvailability,
+    )
+    from sqlalchemy import delete, update
+
+    try:
+        target_ids: list[int] = []
+        if select_all:
+            query = select(Product.id)
+            filters = []
+            if search:
+                s_pat = f"%{search.strip()}%"
+                filters.append(or_(Product.barcode.ilike(s_pat), Product.name.ilike(s_pat)))
+            if category_id is not None:
+                filters.append(Product.category_id == category_id)
+            if filters:
+                query = query.where(*filters)
+            target_ids = list(db.scalars(query).all())
+        elif product_ids:
+            target_ids = list(dict.fromkeys(product_ids))
+
+        if not target_ids:
+            return {"deleted_count": 0, "message": "No products selected for deletion."}
+
+        CHUNK = 1000
+        for i in range(0, len(target_ids), CHUNK):
+            chunk = target_ids[i : i + CHUNK]
+            db.execute(
+                update(OrderItem)
+                .where(OrderItem.product_id.in_(chunk))
+                .values(product_id=None, variant_id=None)
+            )
+            db.execute(
+                update(PriceImportRow)
+                .where(PriceImportRow.product_id.in_(chunk))
+                .values(product_id=None)
+            )
+            var_ids = list(db.scalars(select(ProductVariant.id).where(ProductVariant.product_id.in_(chunk))).all())
+            if var_ids:
+                db.execute(delete(VariantAvailability).where(VariantAvailability.variant_id.in_(var_ids)))
+            db.execute(delete(BranchPriceOverride).where(BranchPriceOverride.product_id.in_(chunk)))
+            db.execute(delete(ProductAvailability).where(ProductAvailability.product_id.in_(chunk)))
+            db.execute(delete(DiscountPrice).where(DiscountPrice.product_id.in_(chunk)))
+            db.execute(delete(ProductImage).where(ProductImage.product_id.in_(chunk)))
+            db.execute(delete(ProductVariant).where(ProductVariant.product_id.in_(chunk)))
+            db.execute(delete(Product).where(Product.id.in_(chunk)))
+            db.flush()
+
+        db.commit()
+        return {
+            "deleted_count": len(target_ids),
+            "message": f"Successfully deleted {len(target_ids)} product(s).",
+        }
+    except Exception:
+        db.rollback()
+        raise
+
+
+def bulk_activate_products(
+    db: Session,
+    product_ids: list[int] | None = None,
+    select_all: bool = False,
+    search: str | None = None,
+    category_id: int | None = None,
+) -> dict[str, Any]:
+    from sqlalchemy import update
+
+    try:
+        filters = []
+        if select_all:
+            if search:
+                s_pat = f"%{search.strip()}%"
+                filters.append(or_(Product.barcode.ilike(s_pat), Product.name.ilike(s_pat)))
+            if category_id is not None:
+                filters.append(Product.category_id == category_id)
+        elif product_ids:
+            filters.append(Product.id.in_(list(dict.fromkeys(product_ids))))
+        else:
+            return {"activated_count": 0, "message": "No products selected."}
+
+        stmt = update(Product).where(*filters, Product.is_active.is_(False)).values(is_active=True)
+        res = db.execute(stmt)
+        db.commit()
+        count = res.rowcount if hasattr(res, "rowcount") and res.rowcount >= 0 else len(product_ids or [])
+        return {
+            "activated_count": count,
+            "message": f"Successfully enabled {count} product(s).",
+        }
+    except Exception:
+        db.rollback()
+        raise
+
+
+def bulk_deactivate_products(
+    db: Session,
+    product_ids: list[int] | None = None,
+    select_all: bool = False,
+    search: str | None = None,
+    category_id: int | None = None,
+) -> dict[str, Any]:
+    from sqlalchemy import update
+
+    try:
+        filters = []
+        if select_all:
+            if search:
+                s_pat = f"%{search.strip()}%"
+                filters.append(or_(Product.barcode.ilike(s_pat), Product.name.ilike(s_pat)))
+            if category_id is not None:
+                filters.append(Product.category_id == category_id)
+        elif product_ids:
+            filters.append(Product.id.in_(list(dict.fromkeys(product_ids))))
+        else:
+            return {"requested_count": 0, "deactivated_count": 0, "product_ids": []}
+
+        stmt = update(Product).where(*filters, Product.is_active.is_(True)).values(is_active=False)
+        res = db.execute(stmt)
+        db.commit()
+        count = res.rowcount if hasattr(res, "rowcount") and res.rowcount >= 0 else len(product_ids or [])
+        return {
+            "requested_count": len(product_ids) if product_ids else count,
+            "deactivated_count": count,
+            "product_ids": product_ids or [],
+        }
+    except Exception:
+        db.rollback()
+        raise
+
+
+def sanitize_existing_product_names(db: Session) -> dict[str, Any]:
+    """
+    Sanitizes existing product names in the database by stripping leading numerical digits
+    and regenerating slugs where appropriate.
+    """
+    products = list(db.scalars(select(Product)).all())
+    cleaned_count = 0
+
+    for p in products:
+        cleaned = clean_product_name(p.name)
+        if cleaned != p.name:
+            p.name = cleaned
+            cleaned_count += 1
+
+    if cleaned_count > 0:
+        db.commit()
 
     return {
-        "requested_count": len(unique_product_ids),
-        "deactivated_count": len(deactivated_product_ids),
-        "product_ids": unique_product_ids,
+        "total_products": len(products),
+        "cleaned_count": cleaned_count,
+        "message": f"Sanitized {cleaned_count} product names.",
     }
+
+
+def bulk_move_products_category(
+    db: Session,
+    target_category_id: int,
+    product_ids: list[int] | None = None,
+    select_all: bool = False,
+    search: str | None = None,
+    category_id: int | None = None,
+) -> dict[str, Any]:
+    from sqlalchemy import update
+
+    target_category = get_category_or_404(db=db, category_id=target_category_id)
+    if not target_category.is_active or target_category.slug == "deals":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Select an active normal product category.",
+        )
+
+    try:
+        filters = []
+        if select_all:
+            if search:
+                s_pat = f"%{search.strip()}%"
+                filters.append(or_(Product.barcode.ilike(s_pat), Product.name.ilike(s_pat)))
+            if category_id is not None:
+                filters.append(Product.category_id == category_id)
+        elif product_ids:
+            filters.append(Product.id.in_(list(dict.fromkeys(product_ids))))
+        else:
+            return {"moved_count": 0, "message": "No products selected."}
+
+        stmt = update(Product).where(*filters).values(category_id=target_category_id)
+        res = db.execute(stmt)
+        db.commit()
+        count = res.rowcount if hasattr(res, "rowcount") and res.rowcount >= 0 else len(product_ids or [])
+        return {
+            "moved_count": count,
+            "target_category_id": target_category.id,
+            "target_category_name": target_category.name,
+            "message": f"Successfully moved {count} product(s) to category '{target_category.name}'.",
+        }
+    except Exception:
+        db.rollback()
+        raise
+

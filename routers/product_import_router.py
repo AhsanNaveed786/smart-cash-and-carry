@@ -16,15 +16,18 @@ from schemas import (
     ProductImportApplyRequest,
     ProductImportApplyResponse,
     ProductImportBatchResponse,
+    ProductImportBulkAssignRequest,
     ProductImportCategoryConfirmRequest,
     ProductImportConfirmationResponse,
     ProductImportConfirmAllRequest,
+    ProductImportQuickCategorizeResponse,
     ProductImportRowResponse,
     ProductImportRowsResponse,
     ProductImportReviewSummary,
 )
 from services.product_category_ai_service import (
     categorize_product_import_rows,
+    quick_auto_categorize_product_import_rows,
 )
 from services.product_import_apply_service import (
     apply_product_import,
@@ -34,6 +37,7 @@ from services.product_import_confirmation_service import (
     confirm_product_import_row_category,
 )
 from services.product_import_service import (
+    bulk_assign_category_to_pending,
     create_product_import_preview,
     get_product_import_batch,
     get_product_import_rows,
@@ -90,15 +94,48 @@ def view_product_import_rows(
 
 
 @router.post(
+    "/{batch_id}/quick-categorize",
+    response_model=ProductImportQuickCategorizeResponse,
+)
+def quick_categorize_import_rows(
+    batch_id: int,
+    db: Session = Depends(get_db),
+):
+    return quick_auto_categorize_product_import_rows(
+        db=db,
+        batch_id=batch_id,
+    )
+
+
+@router.post(
+    "/{batch_id}/assign-category-all",
+    response_model=ProductImportReviewSummary,
+)
+def bulk_assign_category_to_all_pending(
+    batch_id: int,
+    payload: ProductImportBulkAssignRequest,
+    db: Session = Depends(get_db),
+):
+    return bulk_assign_category_to_pending(
+        db=db,
+        batch_id=batch_id,
+        category_id=payload.category_id,
+        category_name=payload.category_name,
+        include_ai_categorized=payload.include_ai_categorized,
+        target_scope=payload.target_scope,
+    )
+
+
+@router.post(
     "/{batch_id}/categorize-ai",
     response_model=ProductCategorizationRunResponse,
 )
 async def categorize_import_using_ai(
     batch_id: int,
     limit: int = Query(
-        default=50,
+        default=100,
         ge=1,
-        le=100,
+        le=200,
     ),
     db: Session = Depends(get_db),
 ):
@@ -154,6 +191,8 @@ def confirm_and_create_products(
     return apply_product_import(
         db=db,
         batch_id=batch_id,
+        fallback_category_id=confirmation.fallback_category_id,
+        auto_assign_default=confirmation.auto_assign_default,
     )
 
 

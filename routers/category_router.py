@@ -12,6 +12,7 @@ from schemas import (
 from services.category_service import (
     create_category,
     deactivate_category,
+    delete_category,
     get_all_categories,
     get_category_by_id,
     update_category,
@@ -82,6 +83,20 @@ def edit_category(
         db=db,
         category_id=category_id,
         category_data=category_data,
+    )
+
+
+@router.delete(
+    "/{category_id}/permanent",
+)
+def permanently_remove_category(
+    category_id: int,
+    db: Session = Depends(get_db),
+    _admin: Admin = Depends(require_current_admin),
+):
+    return delete_category(
+        db=db,
+        category_id=category_id,
     )
 
 

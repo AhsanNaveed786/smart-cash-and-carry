@@ -17,6 +17,7 @@
         catalogSkip: 0,
         catalogLimit: 100,
         selectedProductIds: new Set(),
+        selectAllCatalogMode: false,
         lastExportId: null,
         importProductSkip: 0,
         importPageSize: 100,
@@ -280,33 +281,69 @@
     }
 
     function updateBulkProductControls() {
-        const button = document.getElementById("bulk-disable-products");
+        const disableBtn = document.getElementById("bulk-disable-products");
+        const enableBtn = document.getElementById("bulk-enable-products");
+        const deleteBtn = document.getElementById("bulk-delete-products");
+        const moveBtn = document.getElementById("bulk-move-category-btn");
+        const moveSelect = document.getElementById("bulk-move-category-select");
         const selectAll = document.getElementById("catalog-select-all");
-        const checkboxes = [
-            ...document.querySelectorAll(
-                "[data-product-select]:not(:disabled)",
-            ),
-        ];
-        const checkedCount = checkboxes.filter(
-            (checkbox) => checkbox.checked,
-        ).length;
+        const banner = document.getElementById("catalog-selection-banner");
+        const bannerText = document.getElementById("catalog-selection-banner-text");
+        const bannerTotal = document.getElementById("catalog-banner-total");
+        const bannerSelectAll = document.getElementById("catalog-banner-select-all");
 
-        if (button) {
-            button.disabled = state.selectedProductIds.size === 0;
-            button.textContent = (
-                `Disable selected (${state.selectedProductIds.size})`
-            );
+        const checkboxes = [...document.querySelectorAll("[data-product-select]")];
+        const checkedCount = checkboxes.filter((cb) => cb.checked).length;
+        const totalCatalog = state.catalogResult?.total || 0;
+        const effectiveCount = state.selectAllCatalogMode ? totalCatalog : state.selectedProductIds.size;
+
+        if (disableBtn) {
+            disableBtn.disabled = effectiveCount === 0;
+            disableBtn.textContent = `Disable (${effectiveCount.toLocaleString()})`;
+        }
+        if (enableBtn) {
+            enableBtn.disabled = effectiveCount === 0;
+            enableBtn.textContent = `Enable (${effectiveCount.toLocaleString()})`;
+        }
+        if (deleteBtn) {
+            deleteBtn.disabled = effectiveCount === 0;
+            deleteBtn.textContent = `Delete selected (${effectiveCount.toLocaleString()})`;
+        }
+        if (moveBtn) {
+            moveBtn.disabled = effectiveCount === 0;
+            moveBtn.textContent = `Move (${effectiveCount.toLocaleString()})`;
+        }
+        if (moveSelect) {
+            moveSelect.disabled = effectiveCount === 0;
         }
 
         if (selectAll) {
-            selectAll.checked = (
-                checkboxes.length > 0
-                && checkedCount === checkboxes.length
-            );
-            selectAll.indeterminate = (
-                checkedCount > 0
-                && checkedCount < checkboxes.length
-            );
+            selectAll.checked = (checkboxes.length > 0 && checkedCount === checkboxes.length) || state.selectAllCatalogMode;
+            selectAll.indeterminate = !state.selectAllCatalogMode && checkedCount > 0 && checkedCount < checkboxes.length;
+        }
+
+        if (banner) {
+            if (state.selectAllCatalogMode) {
+                banner.style.display = "flex";
+                if (bannerText) bannerText.textContent = `All ${totalCatalog.toLocaleString()} products across the entire catalog are selected.`;
+                if (bannerSelectAll) bannerSelectAll.style.display = "none";
+            } else if (checkboxes.length > 0 && checkedCount === checkboxes.length && totalCatalog > checkboxes.length) {
+                banner.style.display = "flex";
+                if (bannerText) bannerText.textContent = `All ${checkedCount} products on this page are selected.`;
+                if (bannerSelectAll) {
+                    bannerSelectAll.style.display = "inline-block";
+                    if (bannerTotal) bannerTotal.textContent = totalCatalog.toLocaleString();
+                }
+            } else if (state.selectedProductIds.size > 0) {
+                banner.style.display = "flex";
+                if (bannerText) bannerText.textContent = `${state.selectedProductIds.size.toLocaleString()} product(s) selected.`;
+                if (bannerSelectAll) {
+                    bannerSelectAll.style.display = "inline-block";
+                    if (bannerTotal) bannerTotal.textContent = totalCatalog.toLocaleString();
+                }
+            } else {
+                banner.style.display = "none";
+            }
         }
     }
 
@@ -314,9 +351,9 @@
         const filterForm = document.getElementById(
             "catalog-product-filters",
         );
-        const search = filterForm
-            ? new FormData(filterForm).get("search")?.trim()
-            : "";
+        const formData = filterForm ? new FormData(filterForm) : null;
+        const search = formData ? formData.get("search")?.trim() : "";
+        const categoryId = formData ? formData.get("category_id") : "";
 
         const [categories, productResult, branches] = await Promise.all([
             API.get("/api/categories?active_only=false"),
@@ -324,6 +361,7 @@
                 `/api/products${API.query({
                     active_only: false,
                     search,
+                    category_id: categoryId ? Number(categoryId) : undefined,
                     skip: state.catalogSkip,
                     limit: state.catalogLimit,
                 })}`,
@@ -337,15 +375,30 @@
         state.branches = branches;
         populateBranchSelects();
 
-        document.getElementById("catalog-categories").innerHTML = categories.length ? categories.map((category) => `<article class="content-list-item"><div class="content-thumb">${category.image_url ? `<img src="${esc(category.image_url)}" alt="">` : esc(category.name.charAt(0))}</div><div><h3>${esc(category.name)}</h3><p>${esc(statusLabel(category.display_mode))} · Order ${category.display_order} · ${category.is_active ? "Active" : "Inactive"}</p><div class="catalog-media-actions"><label>Icon<input type="file" hidden accept="image/jpeg,image/png,image/webp" data-category-icon="${category.id}"></label><label>Banner<input type="file" hidden accept="image/jpeg,image/png,image/webp" data-category-banner="${category.id}"></label></div></div><div class="table-actions"><button data-edit-category="${category.id}">Edit</button><button class="danger" data-deactivate-category="${category.id}">${category.is_active ? "Disable" : "Keep disabled"}</button></div></article>`).join("") : empty("No categories yet.");
+        const moveSelect = document.getElementById("bulk-move-category-select");
+        if (moveSelect) {
+            const currentVal = moveSelect.value;
+            const validCats = categories.filter((c) => c.is_active && c.slug !== "deals");
+            moveSelect.innerHTML = `<option value="">Move to Category...</option>` +
+                validCats.map((c) => `<option value="${c.id}" ${currentVal == c.id ? "selected" : ""}>${esc(c.name)}</option>`).join("");
+        }
+
+        const catFilter = document.getElementById("catalog-category-filter");
+        if (catFilter) {
+            const currentVal = catFilter.value;
+            catFilter.innerHTML = `<option value="">All categories</option>` +
+                categories.map((c) => `<option value="${c.id}" ${currentVal == c.id ? "selected" : ""}>${esc(c.name)}</option>`).join("");
+        }
+
+        document.getElementById("catalog-categories").innerHTML = categories.length ? categories.map((category) => `<article class="content-list-item"><div class="content-thumb">${category.image_url ? `<img src="${esc(category.image_url)}" alt="">` : esc(category.name.charAt(0))}</div><div><h3>${esc(category.name)}</h3><p>${esc(statusLabel(category.display_mode))} · Order ${category.display_order} · ${category.is_active ? "Active" : "Inactive"}</p><div class="catalog-media-actions"><label>Icon<input type="file" hidden accept="image/jpeg,image/png,image/webp" data-category-icon="${category.id}"></label><label>Banner<input type="file" hidden accept="image/jpeg,image/png,image/webp" data-category-banner="${category.id}"></label></div></div><div class="table-actions"><button data-edit-category="${category.id}">Edit</button><button class="danger" data-deactivate-category="${category.id}">${category.is_active ? "Disable" : "Keep disabled"}</button><button class="danger" data-delete-category="${category.id}" style="background:#7f1d1d;color:#fff;border-color:#991b1b;" title="Permanently delete category and its products">Delete</button></div></article>`).join("") : empty("No categories yet.");
         document.getElementById("catalog-branches").innerHTML = branches.length ? branches.map((branch) => `<article class="content-list-item"><div class="content-thumb">⌖</div><div><h3>${esc(branch.name)}</h3><p>${esc(branch.code)} · ${branch.is_active ? "Customer-visible" : "Inactive"}</p></div><div class="table-actions"><button data-edit-branch="${branch.id}">Edit</button><button class="danger" data-deactivate-branch="${branch.id}">${branch.is_active ? "Disable" : "Keep disabled"}</button></div></article>`).join("") : empty("No branches yet.");
 
         document.getElementById("catalog-products-count").textContent = (
-            `Showing ${state.products.length} of ${productResult.total} product(s)`
+            `Showing ${state.products.length} of ${productResult.total.toLocaleString()} product(s)`
         );
 
         document.getElementById("catalog-products").innerHTML = state.products.length
-            ? `<table class="admin-table"><thead><tr><th><input class="product-select-checkbox" id="catalog-select-all" type="checkbox" aria-label="Select every active product on this page"></th><th>Product</th><th>Category</th><th>Master price</th><th>Status</th><th>Media & options</th><th>Actions</th></tr></thead><tbody>${state.products.map((product) => `<tr><td><input class="product-select-checkbox" data-product-select="${product.id}" type="checkbox" ${state.selectedProductIds.has(product.id) ? "checked" : ""} ${product.is_active ? "" : "disabled"} aria-label="Select ${esc(product.name)}"></td><td><strong>${esc(product.name)}</strong><small>${esc(product.barcode)} · ${esc(product.unit_size || "No unit size")}</small></td><td>${esc(state.categories.find((category) => category.id === product.category_id)?.name || `Category ${product.category_id}`)}</td><td>${API.formatMoney(product.master_price)}</td><td>${statusPill(product.is_active ? "active" : "inactive")}</td><td><div class="catalog-media-actions"><label>Main image<input type="file" hidden accept="image/jpeg,image/png,image/webp" data-product-image="${product.id}"></label><label>Gallery<input type="file" hidden accept="image/jpeg,image/png,image/webp" data-product-gallery="${product.id}"></label><button data-product-variants="${product.id}">Variants</button></div></td><td><div class="table-actions"><button data-edit-product="${product.id}">Edit</button>${product.is_active ? `<button class="danger" data-deactivate-product="${product.id}">Disable</button>` : `<button class="admin-button" data-activate-product="${product.id}">Enable</button>`}<button class="danger" data-delete-product="${product.id}">Delete</button></div></td></tr>`).join("")}</tbody></table>`
+            ? `<table class="admin-table"><thead><tr><th><input class="product-select-checkbox" id="catalog-select-all" type="checkbox" ${state.selectAllCatalogMode ? "checked" : ""} aria-label="Select every product on this page"></th><th>Product</th><th>Category</th><th>Master price</th><th>Status</th><th>Media & options</th><th>Actions</th></tr></thead><tbody>${state.products.map((product) => `<tr><td><input class="product-select-checkbox" data-product-select="${product.id}" type="checkbox" ${state.selectAllCatalogMode || state.selectedProductIds.has(product.id) ? "checked" : ""} aria-label="Select ${esc(product.name)}"></td><td><strong>${esc(product.name)}</strong><small>${esc(product.barcode)} · ${esc(product.unit_size || "No unit size")}</small></td><td>${esc(state.categories.find((category) => category.id === product.category_id)?.name || `Category ${product.category_id}`)}</td><td>${API.formatMoney(product.master_price)}</td><td>${statusPill(product.is_active ? "active" : "inactive")}</td><td><div class="catalog-media-actions"><label>Main image<input type="file" hidden accept="image/jpeg,image/png,image/webp" data-product-image="${product.id}"></label><label>Gallery<input type="file" hidden accept="image/jpeg,image/png,image/webp" data-product-gallery="${product.id}"></label><button data-product-variants="${product.id}">Variants</button></div></td><td><div class="table-actions"><button data-edit-product="${product.id}">Edit</button>${product.is_active ? `<button class="danger" data-deactivate-product="${product.id}">Disable</button>` : `<button class="admin-button" data-activate-product="${product.id}">Enable</button>`}<button class="danger" data-delete-product="${product.id}">Delete</button></div></td></tr>`).join("")}</tbody></table>`
             : empty("No products match this search.");
 
         const currentPage = Math.floor(
@@ -517,11 +570,11 @@
         const from = rows.total ? rows.skip + 1 : 0;
         const to = Math.min(rows.skip + rows.limit, rows.total);
         const pager = `<div class="pagination"><button data-import-page="previous" ${rows.skip === 0 ? "disabled" : ""}>Previous</button><span>${from.toLocaleString()}–${to.toLocaleString()} of ${rows.total.toLocaleString()}</span><button data-import-page="next" ${to >= rows.total ? "disabled" : ""}>Next</button></div>`;
-        const bulkSelection = isEditable ? `<div class="import-bulk-controls"><div><strong>Choose products from the complete file</strong><small>These buttons affect all ${summary.total_rows.toLocaleString()} reviewable rows, not only the current page.</small></div><div class="table-actions"><button data-product-bulk-selection="${batchId}:true">Check all</button><button data-product-bulk-selection="${batchId}:false">Uncheck all</button></div></div>` : "";
+        const bulkSelection = isEditable ? `<div class="import-bulk-controls"><div><strong>Choose products from the complete file</strong><small>These buttons affect all ${summary.total_rows.toLocaleString()} reviewable rows, not only the current page.</small></div><div class="table-actions"><button data-product-bulk-selection="${batchId}:true">Check all</button><button data-product-bulk-selection="${batchId}:false">Uncheck all</button></div></div><div class="import-bulk-controls"><div><strong>Bulk Assign Category (1-Click)</strong><small>Assign a category to remaining pending products or categorize ALL items (including AI-categorized) into one chosen category.</small></div><div class="table-actions" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;"><select id="bulk-assign-cat-select-${batchId}"><option value="">Choose category</option>${state.categories.filter((c) => c.is_active && c.slug !== "deals").map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join("")}</select><button class="admin-button" data-product-bulk-category="${batchId}:pending">Assign to all pending (${summary.pending_rows.toLocaleString()})</button><button class="admin-button secondary" data-product-bulk-category="${batchId}:all">Assign to ALL products in file (${summary.total_rows.toLocaleString()})</button></div></div>` : "";
         const productActions = isEditable
-            ? `<div class="import-action-bar"><div><strong>Create selected new products</strong><small>${embedded ? "This is separate from the master-price confirmation above." : "Only checked and reviewed products will be created."}</small></div><div class="table-actions"><button data-product-ai="${batchId}">Categorize next selected rows</button><button data-product-confirm="${batchId}">Accept reviewed AI suggestions</button><button class="admin-button primary" data-product-apply="${batchId}">Confirm selected new products only</button></div></div>`
+            ? `<div class="import-action-bar"><div><strong>Create selected new products</strong><small>${embedded ? "This is separate from the master-price confirmation above." : "Only checked and reviewed products will be created."}</small></div><div class="table-actions"><button class="admin-button" data-product-quick-ai="${batchId}">⚡ Quick Auto-Categorize All</button><button data-product-ai="${batchId}">AI Categorize next 100</button><button data-product-confirm="${batchId}">Accept reviewed AI suggestions</button><button class="admin-button primary" data-product-apply="${batchId}">Confirm & Import Products</button></div></div>`
             : `<div class="import-action-bar"><span class="import-complete-note">✓ This product list has been processed.</span></div>`;
-        return `<section class="import-workflow-section"><div class="card-head"><div><span class="admin-eyebrow">${embedded ? "Step 2 · New products only" : "Product review"}</span><h2>${embedded ? "New products found in master file" : `Product import #${batch.id}`}</h2><p>Choose products, run AI, review existing or proposed new categories, then confirm this list separately.</p></div>${statusPill(batch.status)}</div><div class="preview-summary"><span>${summary.total_rows.toLocaleString()} total</span><span>${summary.selected_rows.toLocaleString()} selected</span><span>${summary.categorized_rows.toLocaleString()} checked</span><span>${summary.pending_rows.toLocaleString()} remaining</span><span>${summary.existing_category_rows.toLocaleString()} existing category</span><span>${summary.new_category_rows.toLocaleString()} new category</span><span>${summary.invalid_rows.toLocaleString()} invalid</span></div><div class="import-progress"><span style="width:${Math.max(0, Math.min(100, summary.progress_percentage))}%"></span></div>${bulkSelection}${summary.new_category_rows ? `<p class="import-review-note">Groq proposed ${summary.new_category_rows} new category assignment(s). Review them below; categories are created only after final confirmation.</p>` : ""}${table}${pager}${productActions}</section>`;
+        return `<section class="import-workflow-section"><div class="card-head"><div><span class="admin-eyebrow">${embedded ? "Step 2 · New products only" : "Product review"}</span><h2>${embedded ? "New products found in master file" : `Product import #${batch.id}`}</h2><p>Choose products, run AI/Auto-Categorization, review categories, then confirm this list.</p></div>${statusPill(batch.status)}</div><div class="preview-summary"><span>${summary.total_rows.toLocaleString()} total</span><span>${summary.selected_rows.toLocaleString()} selected</span><span>${summary.categorized_rows.toLocaleString()} checked</span><span>${summary.pending_rows.toLocaleString()} remaining</span><span>${summary.existing_category_rows.toLocaleString()} existing category</span><span>${summary.new_category_rows.toLocaleString()} new category</span><span>${summary.invalid_rows.toLocaleString()} invalid</span></div><div class="import-progress"><span style="width:${Math.max(0, Math.min(100, summary.progress_percentage))}%"></span></div>${bulkSelection}${summary.new_category_rows ? `<p class="import-review-note">Proposed ${summary.new_category_rows} new category assignment(s). Categories are created automatically during final confirmation.</p>` : ""}${table}${pager}${productActions}</section>`;
     }
 
     async function refreshActiveImport() {
@@ -699,26 +752,170 @@
         if (event.target.closest("#new-branch")) return openBranchForm();
         if (event.target.closest("#new-category")) return openCategoryForm();
         if (event.target.closest("#new-product")) return openProductForm();
-        if (event.target.closest("#bulk-disable-products")) {
-            const productIds = [...state.selectedProductIds];
-            if (!productIds.length) return;
-            if (!confirm(`Disable ${productIds.length} selected product(s) on the storefront?`)) return;
+
+        if (event.target.closest("#catalog-select-all-btn") || event.target.closest("#catalog-banner-select-all")) {
+            state.selectAllCatalogMode = true;
+            document.querySelectorAll("[data-product-select]").forEach((cb) => { cb.checked = true; });
+            const selectAll = document.getElementById("catalog-select-all");
+            if (selectAll) selectAll.checked = true;
+            updateBulkProductControls();
+            toast(`All ${state.catalogResult?.total?.toLocaleString() || "catalog"} products selected.`);
+            return;
+        }
+
+        if (event.target.closest("#catalog-banner-clear")) {
+            state.selectAllCatalogMode = false;
+            state.selectedProductIds.clear();
+            document.querySelectorAll("[data-product-select]").forEach((cb) => { cb.checked = false; });
+            const selectAll = document.getElementById("catalog-select-all");
+            if (selectAll) selectAll.checked = false;
+            updateBulkProductControls();
+            toast("Selection cleared.");
+            return;
+        }
+
+        if (event.target.closest("#bulk-enable-products")) {
+            const count = state.selectAllCatalogMode ? state.catalogResult?.total : state.selectedProductIds.size;
+            if (!count) return;
+            if (!confirm(`Enable ${count.toLocaleString()} selected product(s) on the storefront?`)) return;
+            const filterForm = document.getElementById("catalog-product-filters");
+            const search = filterForm ? new FormData(filterForm).get("search")?.trim() : "";
             try {
-                const result = await API.post(
-                    "/api/products/bulk-deactivate",
-                    { product_ids: productIds },
-                );
+                const payload = state.selectAllCatalogMode
+                    ? { select_all: true, search }
+                    : { product_ids: [...state.selectedProductIds] };
+                const result = await API.post("/api/products/bulk-activate", payload);
+                state.selectAllCatalogMode = false;
                 state.selectedProductIds.clear();
                 state.loaded.delete("prices");
                 await loadCatalog();
-                toast(`${result.deactivated_count} product(s) disabled.`);
+                toast(`${result.activated_count.toLocaleString()} product(s) enabled.`);
             } catch (error) {
                 toast(error.message, "error");
             }
             return;
         }
+
+        if (event.target.closest("#bulk-disable-products")) {
+            const count = state.selectAllCatalogMode ? state.catalogResult?.total : state.selectedProductIds.size;
+            if (!count) return;
+            if (!confirm(`Disable ${count.toLocaleString()} selected product(s) on the storefront?`)) return;
+            const filterForm = document.getElementById("catalog-product-filters");
+            const search = filterForm ? new FormData(filterForm).get("search")?.trim() : "";
+            try {
+                const payload = state.selectAllCatalogMode
+                    ? { select_all: true, search }
+                    : { product_ids: [...state.selectedProductIds] };
+                const result = await API.post(
+                    "/api/products/bulk-deactivate",
+                    payload,
+                );
+                state.selectAllCatalogMode = false;
+                state.selectedProductIds.clear();
+                state.loaded.delete("prices");
+                await loadCatalog();
+                toast(`${result.deactivated_count.toLocaleString()} product(s) disabled.`);
+            } catch (error) {
+                toast(error.message, "error");
+            }
+            return;
+        }
+
+        if (event.target.closest("#bulk-delete-products")) {
+            const count = state.selectAllCatalogMode ? state.catalogResult?.total : state.selectedProductIds.size;
+            if (!count) return;
+            if (!confirm(`Permanently delete ${count.toLocaleString()} selected product(s) and all their variants/images? This action cannot be undone.`)) return;
+            const filterForm = document.getElementById("catalog-product-filters");
+            const search = filterForm ? new FormData(filterForm).get("search")?.trim() : "";
+            try {
+                const payload = state.selectAllCatalogMode
+                    ? { select_all: true, search }
+                    : { product_ids: [...state.selectedProductIds] };
+                const result = await API.post("/api/products/bulk-delete", payload);
+                state.selectAllCatalogMode = false;
+                state.selectedProductIds.clear();
+                state.loaded.delete("prices");
+                await loadCatalog();
+                toast(`${result.deleted_count.toLocaleString()} product(s) permanently deleted.`);
+            } catch (error) {
+                toast(error.message, "error");
+            }
+            return;
+        }
+
+        if (event.target.closest("#delete-all-products")) {
+            const total = state.catalogResult?.total || 0;
+            const promptResponse = prompt(
+                `🚨 DANGER: Are you sure you want to permanently delete ALL ${total.toLocaleString()} products from the store database?\n\nThis will remove all products, variants, availability, and images. Historical orders will be preserved.\n\nType "DELETE ALL" to confirm:`
+            );
+            if (promptResponse !== "DELETE ALL") {
+                if (promptResponse !== null) toast("Action cancelled. You must type 'DELETE ALL' exactly.", "error");
+                return;
+            }
+            try {
+                const result = await API.delete("/api/products/delete-all");
+                state.selectAllCatalogMode = false;
+                state.selectedProductIds.clear();
+                state.loaded.delete("prices");
+                await loadCatalog();
+                toast(result.message || "All products deleted.");
+            } catch (error) {
+                toast(error.message, "error");
+            }
+            return;
+        }
+        if (event.target.closest("#bulk-move-category-btn")) {
+            const moveSelect = document.getElementById("bulk-move-category-select");
+            const targetCatId = moveSelect ? Number(moveSelect.value) : 0;
+            if (!targetCatId) {
+                toast("Please select a destination category first.", "error");
+                return;
+            }
+            const targetCat = state.categories.find((c) => c.id === targetCatId);
+            const targetCatName = targetCat ? targetCat.name : `Category #${targetCatId}`;
+            const count = state.selectAllCatalogMode ? state.catalogResult?.total : state.selectedProductIds.size;
+            if (!count) return;
+            if (!confirm(`Move ${count.toLocaleString()} selected product(s) to category "${targetCatName}"?`)) return;
+
+            const filterForm = document.getElementById("catalog-product-filters");
+            const search = filterForm ? new FormData(filterForm).get("search")?.trim() : "";
+            const currentCatId = filterForm ? new FormData(filterForm).get("category_id") : null;
+
+            try {
+                const payload = state.selectAllCatalogMode
+                    ? { select_all: true, search, category_id: currentCatId ? Number(currentCatId) : undefined, target_category_id: targetCatId }
+                    : { product_ids: [...state.selectedProductIds], target_category_id: targetCatId };
+                const result = await API.post("/api/products/bulk-move-category", payload);
+                state.selectAllCatalogMode = false;
+                state.selectedProductIds.clear();
+                state.loaded.delete("prices");
+                await loadCatalog();
+                toast(result.message || `${count} product(s) moved to "${targetCatName}".`);
+            } catch (error) {
+                toast(error.message, "error");
+            }
+            return;
+        }
+
         const editBranch = event.target.closest("[data-edit-branch]"); if (editBranch) return openBranchForm(editBranch.dataset.editBranch).catch((error) => toast(error.message, "error"));
         const editCategory = event.target.closest("[data-edit-category]"); if (editCategory) return openCategoryForm(editCategory.dataset.editCategory).catch((error) => toast(error.message, "error"));
+        const deleteCategory = event.target.closest("[data-delete-category]");
+        if (deleteCategory) {
+            const catId = deleteCategory.dataset.deleteCategory;
+            const cat = state.categories.find((c) => c.id == catId);
+            const catName = cat ? cat.name : `Category #${catId}`;
+            if (confirm(`Are you sure you want to permanently delete category "${catName}"?\n\nWARNING: All products inside this category will also be permanently deleted! This action cannot be undone.`)) {
+                try {
+                    const result = await API.delete(`/api/categories/${catId}/permanent`);
+                    toast(result.message || "Category and associated products permanently deleted.");
+                    await loadCatalog();
+                    state.loaded.delete("prices");
+                } catch (error) {
+                    toast(error.message, "error");
+                }
+            }
+            return;
+        }
         const editProduct = event.target.closest("[data-edit-product]"); if (editProduct) return openProductForm(editProduct.dataset.editProduct).catch((error) => toast(error.message, "error"));
         const productVariants = event.target.closest("[data-product-variants]"); if (productVariants) return openVariants(productVariants.dataset.productVariants).catch((error) => toast(error.message, "error"));
         const deactivateBranch = event.target.closest("[data-deactivate-branch]"); if (deactivateBranch && confirm("Disable this branch for customers?")) { try { await API.delete(`/api/branches/${deactivateBranch.dataset.deactivateBranch}`); toast("Branch disabled."); await loadCatalog(); } catch (error) { toast(error.message, "error"); } return; }
@@ -788,24 +985,98 @@
             }
             return;
         }
-        const productAi = event.target.closest("[data-product-ai]"); if (productAi) { try { await API.post(`/api/product-imports/${productAi.dataset.productAi}/categorize-ai?limit=100`, {}); await refreshActiveImport(); toast("Next selected products categorized."); } catch (error) { toast(error.message, "error"); } return; }
-        const productConfirm = event.target.closest("[data-product-confirm]"); if (productConfirm) { try { await API.post(`/api/product-imports/${productConfirm.dataset.productConfirm}/confirm-ai`, { confirm: true }); await refreshActiveImport(); toast("AI suggestions accepted for selected rows."); } catch (error) { toast(error.message, "error"); } return; }
+        const productQuickAi = event.target.closest("[data-product-quick-ai]");
+        if (productQuickAi) {
+            productQuickAi.disabled = true;
+            productQuickAi.textContent = "⚡ Categorizing...";
+            try {
+                const res = await API.post(`/api/product-imports/${productQuickAi.dataset.productQuickAi}/quick-categorize`, {});
+                await refreshActiveImport();
+                toast(res.message || "Auto-categorization complete.");
+            } catch (error) {
+                toast(error.message, "error");
+            } finally {
+                productQuickAi.disabled = false;
+                productQuickAi.textContent = "⚡ Quick Auto-Categorize All";
+            }
+            return;
+        }
+        const productBulkCat = event.target.closest("[data-product-bulk-category]");
+        if (productBulkCat) {
+            const [batchId, targetScope] = productBulkCat.dataset.productBulkCategory.split(":");
+            const selectEl = document.getElementById(`bulk-assign-cat-select-${batchId}`);
+            const catId = selectEl?.value ? Number(selectEl.value) : null;
+            if (!catId) {
+                toast("Please select a category from the dropdown first.", "error");
+                return;
+            }
+            productBulkCat.disabled = true;
+            const origText = productBulkCat.textContent;
+            productBulkCat.textContent = "Assigning...";
+            try {
+                await API.post(`/api/product-imports/${batchId}/assign-category-all`, {
+                    category_id: catId,
+                    include_ai_categorized: targetScope === "all",
+                    target_scope: targetScope || "pending",
+                });
+                await refreshActiveImport();
+                toast(targetScope === "all" ? "Category assigned to all products in file." : "Category assigned to all remaining products.");
+            } catch (error) {
+                toast(error.message, "error");
+            } finally {
+                productBulkCat.disabled = false;
+                productBulkCat.textContent = origText;
+            }
+            return;
+        }
+        const productAi = event.target.closest("[data-product-ai]");
+        if (productAi) {
+            productAi.disabled = true;
+            productAi.textContent = "Categorizing...";
+            try {
+                await API.post(`/api/product-imports/${productAi.dataset.productAi}/categorize-ai?limit=100`, {});
+                await refreshActiveImport();
+                toast("Next selected products categorized.");
+            } catch (error) {
+                toast(error.message, "error");
+            } finally {
+                productAi.disabled = false;
+                productAi.textContent = "AI Categorize next 100";
+            }
+            return;
+        }
+        const productConfirm = event.target.closest("[data-product-confirm]");
+        if (productConfirm) {
+            try {
+                await API.post(`/api/product-imports/${productConfirm.dataset.productConfirm}/confirm-ai`, { confirm: true });
+                await refreshActiveImport();
+                toast("AI suggestions accepted for selected rows.");
+            } catch (error) {
+                toast(error.message, "error");
+            }
+            return;
+        }
         const productApply = event.target.closest("[data-product-apply]");
         if (productApply) {
-            if (!confirm("Create only the selected and reviewed new products? Master prices are handled separately.")) return;
+            if (!confirm("Create and import all selected and reviewed new products into catalog?")) return;
+            productApply.disabled = true;
+            productApply.textContent = "Importing...";
             try {
                 const result = await API.post(
                     `/api/product-imports/${productApply.dataset.productApply}/apply`,
-                    { confirm: true },
+                    { confirm: true, auto_assign_default: true },
                 );
                 if (state.activeImport?.type === "master") {
                     await refreshActiveImport();
                 } else {
-                    document.getElementById("import-preview").innerHTML = `<div class="empty-panel"><strong>${result.created_products.toLocaleString()} products created.</strong><br>${result.created_categories.length.toLocaleString()} categories created and ${result.skipped_rows.toLocaleString()} row(s) skipped.</div>`;
+                    document.getElementById("import-preview").innerHTML = `<div class="empty-panel"><strong>${result.created_products.toLocaleString()} products created!</strong><br>${result.created_categories.length.toLocaleString()} categories created and ${result.skipped_rows.toLocaleString()} row(s) skipped.</div>`;
                 }
-                toast(`${result.created_products.toLocaleString()} selected new product(s) created.`);
+                toast(`${result.created_products.toLocaleString()} product(s) successfully imported!`);
             } catch (error) {
                 toast(error.message, "error");
+            } finally {
+                productApply.disabled = false;
+                productApply.textContent = "Confirm & Import Products";
             }
             return;
         }
@@ -886,7 +1157,7 @@
 
         if (event.target.id === "catalog-select-all") {
             document.querySelectorAll(
-                "[data-product-select]:not(:disabled)",
+                "[data-product-select]",
             ).forEach((checkbox) => {
                 checkbox.checked = event.target.checked;
                 const productId = Number(
@@ -898,6 +1169,7 @@
                     state.selectedProductIds.delete(productId);
                 }
             });
+            if (!event.target.checked) state.selectAllCatalogMode = false;
             updateBulkProductControls();
             return;
         }
@@ -913,6 +1185,7 @@
                 state.selectedProductIds.add(productId);
             } else {
                 state.selectedProductIds.delete(productId);
+                state.selectAllCatalogMode = false;
             }
             updateBulkProductControls();
             return;
