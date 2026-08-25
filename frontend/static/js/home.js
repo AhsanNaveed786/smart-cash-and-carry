@@ -86,7 +86,7 @@
         }));
         const visible = results.filter((entry) => entry.products.length);
         if (!visible.length) {
-            target.innerHTML = `<section class="section container"><div class="empty-state"><div class="empty-state-icon"><svg class="icon"><use href="#i-grid"></use></svg></div><h3>Your shelves are ready for products</h3><p>Add products in the admin panel and they will appear here automatically.</p><a class="button button-primary" href="/admin/login">Open admin</a></div></section>`;
+            target.innerHTML = `<section class="section container"><div class="empty-state"><div class="empty-state-icon"><svg class="icon"><use href="#i-grid"></use></svg></div><h3>Your shelves are ready for products</h3><p>Products will appear here automatically once they are added.</p></div></section>`;
             return;
         }
         target.innerHTML = visible.map(({ category, products }) => `

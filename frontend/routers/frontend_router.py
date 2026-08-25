@@ -114,7 +114,7 @@ def storefront_track_order(request: Request):
     )
 
 
-@router.get("/admin/login", response_class=HTMLResponse)
+@router.get("/superadmin/login", response_class=HTMLResponse)
 def admin_login_page(request: Request):
     return templates.TemplateResponse(
         request=request,
@@ -127,8 +127,8 @@ def admin_login_page(request: Request):
     )
 
 
-@router.get("/admin", response_class=HTMLResponse)
-@router.get("/admin/", response_class=HTMLResponse)
+@router.get("/superadmin", response_class=HTMLResponse)
+@router.get("/superadmin/", response_class=HTMLResponse)
 def admin_dashboard_page(request: Request):
     return templates.TemplateResponse(
         request=request,

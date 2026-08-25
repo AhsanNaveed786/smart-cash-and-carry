@@ -87,7 +87,7 @@
                     password: data.get("password"),
                 });
                 sessionStorage.setItem("smart_admin_csrf", result.csrf_token);
-                location.replace("/admin");
+                location.replace("/superadmin");
             } catch (error) {
                 errorBox.textContent = error.message;
                 errorBox.hidden = false;
@@ -96,7 +96,7 @@
             }
         });
 
-        SmartAPI.get("/api/admin/auth/me").then(() => location.replace("/admin")).catch(() => {});
+        SmartAPI.get("/api/admin/auth/me").then(() => location.replace("/superadmin")).catch(() => {});
     </script>
     <style>
         @keyframes spin { to { transform: rotate(360deg); } }

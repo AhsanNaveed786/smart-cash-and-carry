@@ -118,7 +118,7 @@
         }
 
         sessionStorage.removeItem("smart_admin_csrf");
-        location.replace("/admin/login?reason=session-ended");
+        location.replace("/superadmin/login?reason=session-ended");
     }
 
     async function checkAdminSession() {
@@ -181,7 +181,7 @@
                 }
             }, 45000);
         } catch (error) {
-            if (error.status === 401 || error.status === 403) location.replace("/admin/login");
+            if (error.status === 401 || error.status === 403) location.replace("/superadmin/login");
             else {
                 document.getElementById("admin-loading").innerHTML = `<strong>Dashboard could not open</strong><span>${esc(error.message)}</span><button class="admin-button secondary" onclick="location.reload()">Try again</button>`;
             }

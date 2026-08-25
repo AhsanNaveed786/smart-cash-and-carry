@@ -56,20 +56,20 @@
 
         if (!response.ok) {
             const isAdminDashboard =
-                window.location.pathname === "/admin"
-                || window.location.pathname.startsWith("/admin/");
+                window.location.pathname === "/superadmin"
+                || window.location.pathname.startsWith("/superadmin/");
 
             if (
                 response.status === 401
                 && isAdminDashboard
-                && window.location.pathname !== "/admin/login"
+                && window.location.pathname !== "/superadmin/login"
             ) {
                 sessionStorage.removeItem(
                     "smart_admin_csrf"
                 );
 
                 window.location.replace(
-                    "/admin/login?reason=session-ended"
+                    "/superadmin/login?reason=session-ended"
                 );
             }
 

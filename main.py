@@ -250,7 +250,7 @@ def api_root():
             "SMART CASH & CARRY API is running"
         ),
         "storefront": "/",
-        "admin": "/admin",
+        "admin": "/superadmin",
         "docs": "/docs",
     }
 
