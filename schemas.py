@@ -671,6 +671,7 @@ class ProductImportApplyResponse(SchemaBase):
     batch_id: int
     status: str
     created_products: int
+    created_variants: int = 0
     skipped_rows: int
     applied_at: datetime
     created_categories: list[str] = Field(default_factory=list)
@@ -682,6 +683,7 @@ class MasterImportConfirmResponse(SchemaBase):
     updated_prices: int
     unchanged_prices: int
     created_products: int
+    created_variants: int = 0
     created_categories: list[str]
     skipped_products: int
     status: str

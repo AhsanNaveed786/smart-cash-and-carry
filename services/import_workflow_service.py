@@ -45,6 +45,7 @@ def confirm_master_import_workflow(
 
         product_result = {
             "created_products": 0,
+            "created_variants": 0,
             "created_categories": [],
             "skipped_rows": 0,
         }
@@ -62,6 +63,7 @@ def confirm_master_import_workflow(
             "updated_prices": updated_prices,
             "unchanged_prices": batch.unchanged_rows,
             "created_products": product_result["created_products"],
+            "created_variants": product_result.get("created_variants", 0),
             "created_categories": product_result["created_categories"],
             "skipped_products": product_result["skipped_rows"],
             "status": "applied",
