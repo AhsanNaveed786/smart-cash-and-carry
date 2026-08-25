@@ -440,6 +440,7 @@ class PriceImportRowResponse(SchemaBase):
     batch_id: int
     excel_row_number: int
     product_id: int | None
+    variant_id: int | None = None
     barcode: str | None
     item_name: str | None
     current_price: Decimal | None
@@ -447,6 +448,9 @@ class PriceImportRowResponse(SchemaBase):
     status: str
     apply_selected: bool
     error_message: str | None
+    variant_group_key: str | None = None
+    variant_size_label: str | None = None
+    merge_as_variant: bool = False
     created_at: datetime
 
 
@@ -504,6 +508,9 @@ class ProductImportRowResponse(SchemaBase):
     status: str
     apply_selected: bool
     error_message: str | None
+    variant_group_key: str | None = None
+    variant_size_label: str | None = None
+    merge_as_variant: bool = False
     created_at: datetime
 
 
@@ -579,6 +586,49 @@ class ProductImportQuickCategorizeResponse(SchemaBase):
     categorized_rows: int | None = None
     batch_status: str | None = None
     message: str
+
+
+class VariantGroupMember(SchemaBase):
+    row_id: int
+    item_name: str | None
+    size_label: str | None
+    uploaded_price: Decimal | None
+    merge_as_variant: bool
+    is_master: bool
+
+
+class VariantGroupResponse(SchemaBase):
+    group_key: str
+    base_name: str
+    member_count: int
+    is_merged: bool
+    master_row_id: int | None
+    members: list[VariantGroupMember]
+
+
+class VariantGroupsResponse(SchemaBase):
+    batch_id: int
+    total_groups: int
+    total_variant_rows: int
+    groups: list[VariantGroupResponse]
+
+
+class VariantMergeResponse(SchemaBase):
+    group_key: str
+    merged: bool
+    master_row_id: int | None = None
+    member_count: int
+
+
+class VariantGroupActionRequest(SchemaBase):
+    group_key: str
+
+
+class VariantBulkActionResponse(SchemaBase):
+    batch_id: int
+    merged_groups: int | None = None
+    merged_rows: int | None = None
+    unmerged: bool | None = None
 
 
 class ProductImportBulkAssignRequest(SchemaBase):

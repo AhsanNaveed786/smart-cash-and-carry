@@ -19,6 +19,9 @@ from services.excel_price_service import (
     get_existing_barcodes_set,
     get_products_by_barcodes,
 )
+from services.variant_detection_service import (
+    apply_variant_detection_to_batch,
+)
 
 
 CHUNK_SIZE = 1000
@@ -484,6 +487,9 @@ async def create_product_import_preview(
             chunk = row_dicts[i : i + CHUNK_SIZE]
             db.execute(insert(ProductImportRow).values(chunk))
             db.flush()
+
+        # Detect and tag variant groups
+        apply_variant_detection_to_batch(db=db, batch_id=batch.id)
 
         batch.valid_rows = valid_rows
         batch.invalid_rows = invalid_rows

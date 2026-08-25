@@ -21,6 +21,7 @@ from models import (
     Product,
     ProductImportBatch,
     ProductImportRow,
+    ProductVariant,
 )
 from services.branch_service import get_branch_by_id
 
@@ -160,7 +161,15 @@ def clean_product_name(value: Any) -> str:
     Enhances product names by removing leading numerical digits, sequence counters,
     and associated separators (e.g. '001 candle light' -> 'candle light',
     '12 BABY GLASS' -> 'BABY GLASS', '005 - Lipton Tea' -> 'Lipton Tea').
-    If the name consists entirely of digits, the stripped original is preserved.
+    Also handles wholesaler product codes/prefixes like:
+    - '+7910 product name' -> 'product name'
+    - 'A-G product name' -> 'product name'
+    - 'A One product name' -> 'product name'
+    - 'A -1 product name' -> 'product name'
+    - 'A product name' -> 'product name'
+    - 'A11 product name' -> 'product name'
+    - 'A8068 product name' -> 'product name'
+    If the name consists entirely of digits or prefix, the stripped original is preserved.
     """
     if value is None:
         return ""
@@ -170,6 +179,31 @@ def clean_product_name(value: Any) -> str:
         return ""
 
     cleaned = re.sub(r"^\d+[\s\.\-_/:]*\s*", "", text).strip()
+    
+    # 1. Leading + followed by digits
+    cleaned = re.sub(r"^\+\d+[\s\.\-_/:]*\s*", "", cleaned).strip()
+    
+    # 2. Single letter (A-Z) followed by digits
+    cleaned = re.sub(r"^[A-Za-z]\d+[\s\.\-_/:]*\s*", "", cleaned).strip()
+    
+    # 3. Single letter followed by hyphen and letter/digit
+    cleaned = re.sub(r"^[A-Za-z]\s*-\s*[A-Za-z0-9][\s\.\-_/:]*\s*", "", cleaned).strip()
+    
+    # 4. Single letter followed by space and a short code word (1-3 chars)
+    # that is followed by a separator or space before the real name
+    cleaned = re.sub(r"^[A-Za-z]\s+[A-Za-z0-9]{1,3}[\s.\-_/:]+\s*(?=\S)", "", cleaned).strip()
+
+    # 5. Single standalone letter prefix (e.g., "A product name")
+    # Only strip if: single letter + space(s) + the remaining text has 2+ words
+    # This avoids stripping from normal names like "Apple Juice"
+    single_letter_match = re.match(r"^([A-Za-z])\s+(.*)", cleaned)
+    if single_letter_match:
+        remainder = single_letter_match.group(2).strip()
+        # Only strip if remainder has at least 2 words (a real product name)
+        # "A product name" → strip, "A" alone → don't strip
+        if len(remainder.split()) >= 2:
+            cleaned = remainder
+
     if not cleaned:
         return text
 
@@ -551,27 +585,35 @@ def get_existing_barcodes_set(
     barcodes: set[str],
 ) -> set[str]:
     existing: set[str] = set()
-    barcode_list = list(barcodes)
+    barcode_list = [b.strip() for b in barcodes if b and b.strip()]
     chunk_size = 5000
 
     for start in range(0, len(barcode_list), chunk_size):
         chunk = barcode_list[start : start + chunk_size]
-        found = db.scalars(
+        found_products = db.scalars(
             select(Product.barcode).where(
                 Product.barcode.in_(chunk)
             )
         ).all()
-        existing.update(found)
+        existing.update(p for p in found_products if p)
+
+        found_variants = db.scalars(
+            select(ProductVariant.barcode).where(
+                ProductVariant.barcode.in_(chunk)
+            )
+        ).all()
+        existing.update(v for v in found_variants if v)
 
     return existing
 
 
-def get_products_by_barcodes(
+def get_products_and_variants_by_barcodes(
     db: Session,
     barcodes: set[str],
-) -> dict[str, Product]:
+) -> tuple[dict[str, Product], dict[str, ProductVariant]]:
     products_by_barcode: dict[str, Product] = {}
-    barcode_list = list(barcodes)
+    variants_by_barcode: dict[str, ProductVariant] = {}
+    barcode_list = [b.strip() for b in barcodes if b and b.strip()]
     chunk_size = 1000
 
     for start in range(0, len(barcode_list), chunk_size):
@@ -584,8 +626,32 @@ def get_products_by_barcodes(
         ).all()
 
         for product in products:
-            products_by_barcode[product.barcode] = product
+            if product.barcode:
+                products_by_barcode[product.barcode] = product
 
+        variants = db.scalars(
+            select(ProductVariant)
+            .options(selectinload(ProductVariant.product))
+            .where(ProductVariant.barcode.in_(chunk))
+        ).all()
+
+        for variant in variants:
+            if variant.barcode:
+                variants_by_barcode[variant.barcode] = variant
+                if variant.barcode not in products_by_barcode and variant.product:
+                    products_by_barcode[variant.barcode] = variant.product
+
+    return products_by_barcode, variants_by_barcode
+
+
+def get_products_by_barcodes(
+    db: Session,
+    barcodes: set[str],
+) -> dict[str, Product]:
+    products_by_barcode, _ = get_products_and_variants_by_barcodes(
+        db=db,
+        barcodes=barcodes,
+    )
     return products_by_barcode
 
 
@@ -707,9 +773,11 @@ async def create_master_price_preview(
             )
         }
 
-        products_by_barcode = get_products_by_barcodes(
-            db=db,
-            barcodes=valid_barcodes,
+        products_by_barcode, variants_by_barcode = (
+            get_products_and_variants_by_barcodes(
+                db=db,
+                barcodes=valid_barcodes,
+            )
         )
 
         batch = PriceImportBatch(
@@ -737,6 +805,8 @@ async def create_master_price_preview(
             error_message = None
             apply_selected = False
             product = None
+            variant = None
+            variant_id = None
             current_price = None
 
             validation_errors = []
@@ -763,17 +833,29 @@ async def create_master_price_preview(
                 invalid_rows += 1
 
             else:
+                variant = variants_by_barcode.get(barcode)
                 product = products_by_barcode.get(barcode)
 
-                if product is None:
-                    row_status = "product_not_found"
-                    error_message = (
-                        "New product: review and categorize before "
-                        "final confirmation."
+                if variant is not None:
+                    product = variant.product
+                    variant_id = variant.id
+                    effective_price = Decimal(
+                        str(product.master_price)
+                    ) + Decimal(str(variant.price_adjustment))
+                    current_price = effective_price.quantize(
+                        TWO_DECIMAL_PLACES
                     )
-                    new_product_data.append(extracted_row)
 
-                else:
+                    if current_price == uploaded_price:
+                        row_status = "unchanged"
+                        unchanged_rows += 1
+                    else:
+                        row_status = "changed"
+                        apply_selected = True
+                        changed_rows += 1
+
+                elif product is not None:
+                    variant_id = None
                     current_price = Decimal(
                         product.master_price
                     ).quantize(TWO_DECIMAL_PLACES)
@@ -781,17 +863,26 @@ async def create_master_price_preview(
                     if current_price == uploaded_price:
                         row_status = "unchanged"
                         unchanged_rows += 1
-
                     else:
                         row_status = "changed"
                         apply_selected = True
                         changed_rows += 1
+
+                else:
+                    variant_id = None
+                    row_status = "product_not_found"
+                    error_message = (
+                        "New product: review and categorize before "
+                        "final confirmation."
+                    )
+                    new_product_data.append(extracted_row)
 
             price_row_dicts.append(
                 {
                     "batch_id": batch.id,
                     "excel_row_number": extracted_row["excel_row_number"],
                     "product_id": product.id if product else None,
+                    "variant_id": variant_id,
                     "barcode": barcode,
                     "item_name": item_name,
                     "current_price": current_price,
@@ -933,6 +1024,11 @@ def apply_master_price_import(
             for import_row in import_rows
             if import_row.product_id is not None
         }
+        variant_ids = {
+            import_row.variant_id
+            for import_row in import_rows
+            if import_row.variant_id is not None
+        }
 
         products = list(
             db.scalars(
@@ -947,11 +1043,30 @@ def apply_master_price_import(
             for product in products
         }
 
+        variants = []
+        if variant_ids:
+            variants = list(
+                db.scalars(
+                    select(ProductVariant)
+                    .where(ProductVariant.id.in_(variant_ids))
+                    .with_for_update()
+                ).all()
+            )
+        variants_by_id = {
+            variant.id: variant
+            for variant in variants
+        }
+
         conflicts: list[dict[str, Any]] = []
 
         for import_row in import_rows:
             product = products_by_id.get(
                 import_row.product_id
+            )
+            variant = (
+                variants_by_id.get(import_row.variant_id)
+                if import_row.variant_id
+                else None
             )
 
             if product is None:
@@ -966,7 +1081,10 @@ def apply_master_price_import(
                 )
                 continue
 
-            if product.barcode != import_row.barcode:
+            matched_barcode = (
+                variant.barcode if variant else product.barcode
+            )
+            if matched_barcode != import_row.barcode:
                 conflicts.append(
                     {
                         "excel_row_number": (
@@ -974,7 +1092,7 @@ def apply_master_price_import(
                         ),
                         "barcode": import_row.barcode,
                         "reason": (
-                            "Product barcode changed after preview."
+                            "Product or variant barcode changed after preview."
                         ),
                     }
                 )
@@ -997,12 +1115,20 @@ def apply_master_price_import(
                 )
                 continue
 
-            database_price = Decimal(
-                product.master_price
-            ).quantize(TWO_DECIMAL_PLACES)
+            if variant is not None:
+                effective_price = Decimal(
+                    str(product.master_price)
+                ) + Decimal(str(variant.price_adjustment))
+                database_price = effective_price.quantize(
+                    TWO_DECIMAL_PLACES
+                )
+            else:
+                database_price = Decimal(
+                    str(product.master_price)
+                ).quantize(TWO_DECIMAL_PLACES)
 
             preview_price = Decimal(
-                import_row.current_price
+                str(import_row.current_price)
             ).quantize(TWO_DECIMAL_PLACES)
 
             if database_price != preview_price:
@@ -1043,10 +1169,23 @@ def apply_master_price_import(
             product = products_by_id[
                 import_row.product_id
             ]
-
-            product.master_price = (
-                import_row.uploaded_price
+            variant = (
+                variants_by_id.get(import_row.variant_id)
+                if import_row.variant_id
+                else None
             )
+
+            if variant is not None:
+                if variant.is_default or Decimal(str(variant.price_adjustment)) == Decimal("0.00"):
+                    product.master_price = import_row.uploaded_price
+                else:
+                    variant.price_adjustment = Decimal(
+                        str(import_row.uploaded_price)
+                    ) - Decimal(str(product.master_price))
+            else:
+                product.master_price = (
+                    import_row.uploaded_price
+                )
 
             import_row.status = "applied"
 

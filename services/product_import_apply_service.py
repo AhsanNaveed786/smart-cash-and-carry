@@ -1,14 +1,18 @@
+import re
+from collections import defaultdict
 from datetime import datetime, timezone
+from decimal import Decimal
 
 from fastapi import HTTPException, status
 from sqlalchemy import func, insert, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from models import Category, Product, ProductImportBatch, ProductImportRow
+from models import Category, Product, ProductImportBatch, ProductImportRow, ProductVariant
 from services.category_service import generate_unique_slug
 from services.excel_price_service import clean_product_name
 from services.product_service import bulk_generate_product_slugs
+from services.variant_detection_service import extract_base_name_and_size
 
 
 CHUNK_SIZE = 5000
@@ -232,7 +236,19 @@ def apply_product_import(
                         .with_for_update()
                     ).all()
                 )
-                if existing_products:
+                existing_variants = list(
+                    db.scalars(
+                        select(ProductVariant)
+                        .where(ProductVariant.barcode.in_(chunk_barcodes))
+                        .with_for_update()
+                    ).all()
+                )
+                if existing_products or existing_variants:
+                    collision_barcodes = [
+                        p.barcode for p in existing_products if p.barcode
+                    ] + [
+                        v.barcode for v in existing_variants if v.barcode
+                    ]
                     raise HTTPException(
                         status_code=status.HTTP_409_CONFLICT,
                         detail={
@@ -240,10 +256,7 @@ def apply_product_import(
                                 "Some products were added after preview. "
                                 "Create a fresh preview."
                             ),
-                            "existing_barcodes": [
-                                product.barcode
-                                for product in existing_products[:50]
-                            ],
+                            "existing_barcodes": collision_barcodes[:50],
                         },
                     )
 
@@ -270,32 +283,140 @@ def apply_product_import(
                 detail="A confirmed category is missing or inactive.",
             )
 
-        # High-Speed in-memory slug generation (O(1) lookups for 55k+ rows)
+        # Partition rows into merged variant groups and standalone products
+        selected_by_id = {row.id: row for row in selected_rows}
+        master_to_members: dict[int, list[ProductImportRow]] = defaultdict(list)
+        non_master_merged_row_ids: set[int] = set()
+
+        for row in selected_rows:
+            if row.merge_as_variant and row.variant_master_row_id:
+                master_id = row.variant_master_row_id
+                if master_id in selected_by_id and master_id != row.id:
+                    master_to_members[master_id].append(row)
+                    non_master_merged_row_ids.add(row.id)
+
+        product_rows_to_create = [
+            row for row in selected_rows if row.id not in non_master_merged_row_ids
+        ]
+
+        product_names = []
+        for row in product_rows_to_create:
+            if row.id in master_to_members:
+                base_name, _ = extract_base_name_and_size(row.item_name or "")
+                product_names.append(base_name or clean_product_name(row.item_name))
+            else:
+                product_names.append(clean_product_name(row.item_name))
+
         existing_slugs = set(db.scalars(select(Product.slug)).all())
-        product_names = [clean_product_name(row.item_name) for row in selected_rows]
         slugs = bulk_generate_product_slugs(product_names, existing_slugs)
 
-        # Chunked bulk insertion of Product records (5000 rows/chunk)
         now_dt = datetime.now(timezone.utc)
-        product_records = []
-        for idx, import_row in enumerate(selected_rows):
-            product_records.append({
-                "barcode": import_row.barcode.strip(),
-                "name": clean_product_name(import_row.item_name),
+        master_rows_to_create = [r for r in product_rows_to_create if r.id in master_to_members]
+        standalone_rows_to_create = [r for r in product_rows_to_create if r.id not in master_to_members]
+
+        # Bulk insert standalone products
+        standalone_records = []
+        for row in standalone_rows_to_create:
+            idx = product_rows_to_create.index(row)
+            standalone_records.append({
+                "barcode": row.barcode.strip(),
+                "name": product_names[idx],
                 "slug": slugs[idx],
                 "description": None,
                 "unit_size": None,
-                "master_price": import_row.uploaded_price,
+                "master_price": row.uploaded_price,
                 "image_url": None,
-                "category_id": import_row.confirmed_category_id,
+                "category_id": row.confirmed_category_id,
                 "is_active": True,
                 "created_at": now_dt,
                 "updated_at": now_dt,
             })
 
-        for i in range(0, len(product_records), CHUNK_SIZE):
-            chunk = product_records[i : i + CHUNK_SIZE]
+        for i in range(0, len(standalone_records), CHUNK_SIZE):
+            chunk = standalone_records[i : i + CHUNK_SIZE]
             db.execute(insert(Product).values(chunk))
+            db.flush()
+
+        # Insert master products and their variant options
+        created_variants_count = 0
+        if master_rows_to_create:
+            existing_skus = set(db.scalars(select(ProductVariant.sku)).all())
+            for row in master_rows_to_create:
+                idx = product_rows_to_create.index(row)
+                prod = Product(
+                    barcode=row.barcode.strip(),
+                    name=product_names[idx],
+                    slug=slugs[idx],
+                    description=None,
+                    unit_size=None,
+                    master_price=row.uploaded_price,
+                    image_url=None,
+                    category_id=row.confirmed_category_id,
+                    is_active=True,
+                    created_at=now_dt,
+                    updated_at=now_dt,
+                )
+                db.add(prod)
+                db.flush()
+
+                # Base variant for master product
+                base_name = row.variant_size_label or "Standard"
+                base_sku_raw = re.sub(r'[^A-Za-z0-9_-]', '', row.barcode or prod.slug).upper() or f"PROD{prod.id}"
+                base_sku = f"{base_sku_raw}-BASE"[:100]
+                counter = 1
+                while base_sku in existing_skus:
+                    base_sku = f"{base_sku_raw}-BASE-{counter}"[:100]
+                    counter += 1
+                existing_skus.add(base_sku)
+
+                base_variant = ProductVariant(
+                    product_id=prod.id,
+                    name=base_name,
+                    sku=base_sku,
+                    barcode=row.barcode.strip() if row.barcode else None,
+                    attributes={"size": row.variant_size_label} if row.variant_size_label else {},
+                    price_adjustment=Decimal("0.00"),
+                    display_order=0,
+                    is_default=True,
+                    is_active=True,
+                    created_at=now_dt,
+                    updated_at=now_dt,
+                )
+                db.add(base_variant)
+                created_variants_count += 1
+
+                # Member variants
+                members = master_to_members[row.id]
+                for v_idx, member in enumerate(members, start=1):
+                    member_size = member.variant_size_label or member.item_name or f"Option {v_idx}"
+                    member_sku_raw = re.sub(r'[^A-Za-z0-9_-]', '', member.barcode or f"{prod.slug}-{member_size}").upper() or f"VAR{v_idx}"
+                    member_sku = f"{member_sku_raw}-VAR"[:100]
+                    counter = 1
+                    while member_sku in existing_skus:
+                        member_sku = f"{member_sku_raw}-VAR-{counter}"[:100]
+                        counter += 1
+                    existing_skus.add(member_sku)
+
+                    master_price = Decimal(str(row.uploaded_price or 0))
+                    member_price = Decimal(str(member.uploaded_price or 0))
+                    price_diff = member_price - master_price
+
+                    member_variant = ProductVariant(
+                        product_id=prod.id,
+                        name=member_size,
+                        sku=member_sku,
+                        barcode=member.barcode.strip() if member.barcode else None,
+                        attributes={"size": member.variant_size_label} if member.variant_size_label else {},
+                        price_adjustment=price_diff,
+                        display_order=v_idx,
+                        is_default=False,
+                        is_active=True,
+                        created_at=now_dt,
+                        updated_at=now_dt,
+                    )
+                    db.add(member_variant)
+                    created_variants_count += 1
+
             db.flush()
 
         # Chunked bulk update of applied ProductImportRow statuses
@@ -338,7 +459,8 @@ def apply_product_import(
         return {
             "batch_id": batch.id,
             "status": batch.status,
-            "created_products": len(selected_rows),
+            "created_products": len(product_rows_to_create),
+            "created_variants": created_variants_count,
             "created_categories": created_categories,
             "skipped_rows": skipped_count,
             "applied_at": now_dt,

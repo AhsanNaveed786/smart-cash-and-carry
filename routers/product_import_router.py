@@ -1,4 +1,5 @@
 from fastapi import (
+    status,
     APIRouter,
     Depends,
     File,
@@ -24,6 +25,17 @@ from schemas import (
     ProductImportRowResponse,
     ProductImportRowsResponse,
     ProductImportReviewSummary,
+    VariantBulkActionResponse,
+    VariantGroupActionRequest,
+    VariantGroupsResponse,
+    VariantMergeResponse,
+)
+from services.variant_detection_service import (
+    get_variant_groups,
+    merge_variant_group,
+    unmerge_variant_group,
+    merge_all_variant_groups,
+    unmerge_all_variant_groups,
 )
 from services.product_category_ai_service import (
     categorize_product_import_rows,
@@ -44,6 +56,11 @@ from services.product_import_service import (
     get_product_import_review_summary,
     update_product_import_row_selection,
     update_all_product_import_row_selection,
+)
+from services.variant_detection_service import (
+    get_variant_groups,
+    merge_variant_group,
+    unmerge_variant_group,
 )
 
 
@@ -252,3 +269,121 @@ def change_all_product_rows_selection(
         batch_id=batch_id,
         apply_selected=selection.apply_selected,
     )
+
+
+@router.get(
+    "/{batch_id}/variant-groups",
+    response_model=VariantGroupsResponse,
+    status_code=status.HTTP_200_OK,
+)
+def get_batch_variant_groups(
+    batch_id: int,
+    db: Session = Depends(get_db),
+):
+    groups = get_variant_groups(db=db, batch_id=batch_id)
+    total_variant_rows = sum(g['member_count'] for g in groups)
+    return {
+        'batch_id': batch_id,
+        'total_groups': len(groups),
+        'total_variant_rows': total_variant_rows,
+        'groups': groups,
+    }
+
+
+@router.post(
+    "/{batch_id}/variant-groups/merge-all",
+    response_model=VariantBulkActionResponse,
+    status_code=status.HTTP_200_OK,
+)
+def merge_all_batch_variant_groups(
+    batch_id: int,
+    db: Session = Depends(get_db),
+):
+    return merge_all_variant_groups(
+        db=db,
+        batch_id=batch_id,
+    )
+
+
+@router.post(
+    "/{batch_id}/variant-groups/unmerge-all",
+    response_model=VariantBulkActionResponse,
+    status_code=status.HTTP_200_OK,
+)
+def unmerge_all_batch_variant_groups(
+    batch_id: int,
+    db: Session = Depends(get_db),
+):
+    return unmerge_all_variant_groups(
+        db=db,
+        batch_id=batch_id,
+    )
+
+
+@router.post(
+    "/{batch_id}/variant-groups/merge",
+    response_model=VariantMergeResponse,
+    status_code=status.HTTP_200_OK,
+)
+def merge_batch_variant_group_body(
+    batch_id: int,
+    payload: VariantGroupActionRequest,
+    db: Session = Depends(get_db),
+):
+    return merge_variant_group(
+        db=db,
+        batch_id=batch_id,
+        group_key=payload.group_key,
+    )
+
+
+@router.post(
+    "/{batch_id}/variant-groups/unmerge",
+    response_model=VariantMergeResponse,
+    status_code=status.HTTP_200_OK,
+)
+def unmerge_batch_variant_group_body(
+    batch_id: int,
+    payload: VariantGroupActionRequest,
+    db: Session = Depends(get_db),
+):
+    return unmerge_variant_group(
+        db=db,
+        batch_id=batch_id,
+        group_key=payload.group_key,
+    )
+
+
+@router.post(
+    "/{batch_id}/variant-groups/{group_key:path}/merge",
+    response_model=VariantMergeResponse,
+    status_code=status.HTTP_200_OK,
+)
+def merge_batch_variant_group(
+    batch_id: int,
+    group_key: str,
+    db: Session = Depends(get_db),
+):
+    return merge_variant_group(
+        db=db,
+        batch_id=batch_id,
+        group_key=group_key,
+    )
+
+
+@router.post(
+    "/{batch_id}/variant-groups/{group_key:path}/unmerge",
+    response_model=VariantMergeResponse,
+    status_code=status.HTTP_200_OK,
+)
+def unmerge_batch_variant_group(
+    batch_id: int,
+    group_key: str,
+    db: Session = Depends(get_db),
+):
+    return unmerge_variant_group(
+        db=db,
+        batch_id=batch_id,
+        group_key=group_key,
+    )
+

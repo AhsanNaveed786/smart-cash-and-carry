@@ -791,6 +791,15 @@ class PriceImportRow(Base):
         index=True,
     )
 
+    variant_id: Mapped[int | None] = mapped_column(
+        ForeignKey(
+            "product_variants.id",
+            ondelete="SET NULL",
+        ),
+        nullable=True,
+        index=True,
+    )
+
     barcode: Mapped[str | None] = mapped_column(
         String(100),
         nullable=True,
@@ -841,6 +850,7 @@ class PriceImportRow(Base):
     )
 
     product: Mapped[Product | None] = relationship()
+    variant: Mapped[ProductVariant | None] = relationship()
 
 class ProductImportBatch(Base):
     __tablename__ = "product_import_batches"
@@ -1059,6 +1069,32 @@ class ProductImportRow(Base):
 
     error_message: Mapped[str | None] = mapped_column(
         Text,
+        nullable=True,
+    )
+
+    variant_group_key: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+        index=True,
+    )
+
+    variant_size_label: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+    )
+
+    merge_as_variant: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="false",
+    )
+
+    variant_master_row_id: Mapped[int | None] = mapped_column(
+        ForeignKey(
+            "product_import_rows.id",
+            ondelete="SET NULL",
+        ),
         nullable=True,
     )
 

@@ -560,13 +560,46 @@
 
     async function productImportMarkup(batchId, embedded) {
         if (!state.categories.length) state.categories = await API.get("/api/categories?active_only=false");
-        const [batch, summary, rows] = await Promise.all([
+        const [batch, summary, rows, variantGroups] = await Promise.all([
             API.get(`/api/product-imports/${batchId}`),
             API.get(`/api/product-imports/${batchId}/summary`),
             API.get(`/api/product-imports/${batchId}/rows?skip=${state.importProductSkip}&limit=${state.importPageSize}`),
+            API.get(`/api/product-imports/${batchId}/variant-groups`).catch(() => ({ total_groups: 0, total_variant_rows: 0, groups: [] })),
         ]);
         const isEditable = !["applied", "cancelled", "failed"].includes(batch.status);
-        const table = rows.items.length ? `<div class="table-wrap"><table class="admin-table"><thead><tr><th>Upload</th><th>Row</th><th>Item code</th><th>Product</th><th>Price</th><th>AI / reviewed category</th><th>Status</th></tr></thead><tbody>${rows.items.map((row) => `<tr><td>${isEditable && ["pending_category", "ready"].includes(row.status) ? `<input class="import-row-check" type="checkbox" data-product-import-select="${batchId}:${row.id}" ${row.apply_selected ? "checked" : ""}>` : "—"}</td><td>${row.excel_row_number}</td><td>${esc(row.barcode || "—")}</td><td><strong>${esc(row.item_name || "—")}</strong>${row.ai_reason ? `<small>${esc(row.ai_reason)}</small>` : ""}</td><td>${row.uploaded_price === null ? "—" : API.formatMoney(row.uploaded_price)}</td><td>${isEditable && ["pending_category", "ready"].includes(row.status) ? categoryReviewControl(batchId, row) : "—"}</td><td>${row.suggested_category_name ? `<span class="new-category-pill">New: ${esc(row.suggested_category_name)}</span>` : statusPill(row.status)}</td></tr>`).join("")}</tbody></table></div>` : empty("No rows on this page.");
+        const variantGroupsMarkup = variantGroups && variantGroups.total_groups > 0 ? `
+            <div class="import-bulk-controls" style="background:var(--color-bg-subtle, #f8fafc);border-left:4px solid var(--color-primary, #0ea5e9);padding:14px;margin:14px 0;border-radius:8px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:10px;">
+                    <div>
+                        <strong>🔍 Detected ${variantGroups.total_groups} Variant Groups (${variantGroups.total_variant_rows} products)</strong>
+                        <small style="display:block;color:var(--color-text-muted,#64748b);">Products sharing the same base name with different unit sizes (ml, g, kg, etc.) were found. Merge them into 1 master product with size variants or keep them as separate products.</small>
+                    </div>
+                    ${isEditable ? `
+                    <div class="table-actions" style="display:flex;gap:8px;">
+                        <button class="admin-button" data-variant-merge-all="${batchId}">⚡ Merge All Groups as Variants</button>
+                        <button class="admin-button secondary" data-variant-unmerge-all="${batchId}">Separate All</button>
+                    </div>` : ""}
+                </div>
+                <div style="display:flex;flex-direction:column;gap:8px;max-height:260px;overflow-y:auto;">
+                    ${variantGroups.groups.map((grp) => `
+                        <div style="display:flex;justify-content:space-between;align-items:center;background:#fff;padding:8px 12px;border-radius:6px;border:1px solid var(--color-border,#e2e8f0);flex-wrap:wrap;gap:8px;">
+                            <div>
+                                <strong>${esc(grp.base_name)}</strong>
+                                <span style="margin-left:8px;font-size:12px;color:#64748b;">(${grp.members.map((m) => `${esc(m.size_label || m.item_name)}: ${API.formatMoney(m.uploaded_price)}`).join(", ")})</span>
+                            </div>
+                            <div style="display:flex;align-items:center;gap:8px;">
+                                ${grp.is_merged ? '<span class="status-pill active" style="font-size:11px;">✓ Merged as Variants</span>' : '<span class="status-pill" style="font-size:11px;">Separate Products</span>'}
+                                ${isEditable ? (grp.is_merged
+                                    ? `<button class="admin-button secondary" style="font-size:12px;padding:4px 8px;" data-variant-unmerge="${batchId}:${esc(grp.group_key)}">Separate</button>`
+                                    : `<button class="admin-button" style="font-size:12px;padding:4px 8px;" data-variant-merge="${batchId}:${esc(grp.group_key)}">⚡ Merge as Variants</button>`
+                                ) : ""}
+                            </div>
+                        </div>
+                    `).join("")}
+                </div>
+            </div>
+        ` : "";
+        const table = rows.items.length ? `<div class="table-wrap"><table class="admin-table"><thead><tr><th>Upload</th><th>Row</th><th>Item code</th><th>Product</th><th>Price</th><th>AI / reviewed category</th><th>Status</th></tr></thead><tbody>${rows.items.map((row) => `<tr><td>${isEditable && ["pending_category", "ready"].includes(row.status) ? `<input class="import-row-check" type="checkbox" data-product-import-select="${batchId}:${row.id}" ${row.apply_selected ? "checked" : ""}>` : "—"}</td><td>${row.excel_row_number}</td><td>${esc(row.barcode || "—")}</td><td><strong>${esc(row.item_name || "—")}</strong>${row.variant_size_label ? (row.merge_as_variant ? `<span class="status-pill active" style="font-size:11px;margin-left:4px;">Variant: ${esc(row.variant_size_label)}</span>` : `<span class="status-pill" style="font-size:11px;margin-left:4px;">Size: ${esc(row.variant_size_label)}</span>`) : ""}${row.ai_reason ? `<small>${esc(row.ai_reason)}</small>` : ""}</td><td>${row.uploaded_price === null ? "—" : API.formatMoney(row.uploaded_price)}</td><td>${isEditable && ["pending_category", "ready"].includes(row.status) ? categoryReviewControl(batchId, row) : "—"}</td><td>${row.suggested_category_name ? `<span class="new-category-pill">New: ${esc(row.suggested_category_name)}</span>` : statusPill(row.status)}</td></tr>`).join("")}</tbody></table></div>` : empty("No rows on this page.");
         const from = rows.total ? rows.skip + 1 : 0;
         const to = Math.min(rows.skip + rows.limit, rows.total);
         const pager = `<div class="pagination"><button data-import-page="previous" ${rows.skip === 0 ? "disabled" : ""}>Previous</button><span>${from.toLocaleString()}–${to.toLocaleString()} of ${rows.total.toLocaleString()}</span><button data-import-page="next" ${to >= rows.total ? "disabled" : ""}>Next</button></div>`;
@@ -574,7 +607,7 @@
         const productActions = isEditable
             ? `<div class="import-action-bar"><div><strong>Create selected new products</strong><small>${embedded ? "This is separate from the master-price confirmation above." : "Only checked and reviewed products will be created."}</small></div><div class="table-actions"><button class="admin-button" data-product-quick-ai="${batchId}">⚡ Quick Auto-Categorize All</button><button data-product-ai="${batchId}">AI Categorize next 100</button><button data-product-confirm="${batchId}">Accept reviewed AI suggestions</button><button class="admin-button primary" data-product-apply="${batchId}">Confirm & Import Products</button></div></div>`
             : `<div class="import-action-bar"><span class="import-complete-note">✓ This product list has been processed.</span></div>`;
-        return `<section class="import-workflow-section"><div class="card-head"><div><span class="admin-eyebrow">${embedded ? "Step 2 · New products only" : "Product review"}</span><h2>${embedded ? "New products found in master file" : `Product import #${batch.id}`}</h2><p>Choose products, run AI/Auto-Categorization, review categories, then confirm this list.</p></div>${statusPill(batch.status)}</div><div class="preview-summary"><span>${summary.total_rows.toLocaleString()} total</span><span>${summary.selected_rows.toLocaleString()} selected</span><span>${summary.categorized_rows.toLocaleString()} checked</span><span>${summary.pending_rows.toLocaleString()} remaining</span><span>${summary.existing_category_rows.toLocaleString()} existing category</span><span>${summary.new_category_rows.toLocaleString()} new category</span><span>${summary.invalid_rows.toLocaleString()} invalid</span></div><div class="import-progress"><span style="width:${Math.max(0, Math.min(100, summary.progress_percentage))}%"></span></div>${bulkSelection}${summary.new_category_rows ? `<p class="import-review-note">Proposed ${summary.new_category_rows} new category assignment(s). Categories are created automatically during final confirmation.</p>` : ""}${table}${pager}${productActions}</section>`;
+        return `<section class="import-workflow-section"><div class="card-head"><div><span class="admin-eyebrow">${embedded ? "Step 2 · New products only" : "Product review"}</span><h2>${embedded ? "New products found in master file" : `Product import #${batch.id}`}</h2><p>Choose products, run AI/Auto-Categorization, review categories, then confirm this list.</p></div>${statusPill(batch.status)}</div><div class="preview-summary"><span>${summary.total_rows.toLocaleString()} total</span><span>${summary.selected_rows.toLocaleString()} selected</span><span>${summary.categorized_rows.toLocaleString()} checked</span><span>${summary.pending_rows.toLocaleString()} remaining</span><span>${summary.existing_category_rows.toLocaleString()} existing category</span><span>${summary.new_category_rows.toLocaleString()} new category</span><span>${summary.invalid_rows.toLocaleString()} invalid</span></div><div class="import-progress"><span style="width:${Math.max(0, Math.min(100, summary.progress_percentage))}%"></span></div>${variantGroupsMarkup}${bulkSelection}${summary.new_category_rows ? `<p class="import-review-note">Proposed ${summary.new_category_rows} new category assignment(s). Categories are created automatically during final confirmation.</p>` : ""}${table}${pager}${productActions}</section>`;
     }
 
     async function refreshActiveImport() {
@@ -1026,6 +1059,64 @@
             } finally {
                 productBulkCat.disabled = false;
                 productBulkCat.textContent = origText;
+            }
+            return;
+        }
+        const variantMerge = event.target.closest("[data-variant-merge]");
+        if (variantMerge) {
+            const [batchId, groupKey] = variantMerge.dataset.variantMerge.split(":");
+            try {
+                await API.post(`/api/product-imports/${batchId}/variant-groups/merge`, { group_key: groupKey });
+                await refreshActiveImport();
+                toast("Group marked to merge as product variants.");
+            } catch (error) {
+                toast(error.message, "error");
+            }
+            return;
+        }
+        const variantUnmerge = event.target.closest("[data-variant-unmerge]");
+        if (variantUnmerge) {
+            const [batchId, groupKey] = variantUnmerge.dataset.variantUnmerge.split(":");
+            try {
+                await API.post(`/api/product-imports/${batchId}/variant-groups/unmerge`, { group_key: groupKey });
+                await refreshActiveImport();
+                toast("Group marked as separate products.");
+            } catch (error) {
+                toast(error.message, "error");
+            }
+            return;
+        }
+        const variantMergeAll = event.target.closest("[data-variant-merge-all]");
+        if (variantMergeAll) {
+            const batchId = variantMergeAll.dataset.variantMergeAll;
+            variantMergeAll.disabled = true;
+            variantMergeAll.textContent = "Merging...";
+            try {
+                const res = await API.post(`/api/product-imports/${batchId}/variant-groups/merge-all`, {});
+                await refreshActiveImport();
+                toast(`Merged ${res.merged_groups || 0} variant groups (${res.merged_rows || 0} products).`);
+            } catch (error) {
+                toast(error.message, "error");
+            } finally {
+                variantMergeAll.disabled = false;
+                variantMergeAll.textContent = "⚡ Merge All Groups as Variants";
+            }
+            return;
+        }
+        const variantUnmergeAll = event.target.closest("[data-variant-unmerge-all]");
+        if (variantUnmergeAll) {
+            const batchId = variantUnmergeAll.dataset.variantUnmergeAll;
+            variantUnmergeAll.disabled = true;
+            variantUnmergeAll.textContent = "Separating...";
+            try {
+                await API.post(`/api/product-imports/${batchId}/variant-groups/unmerge-all`, {});
+                await refreshActiveImport();
+                toast("All variant groups separated.");
+            } catch (error) {
+                toast(error.message, "error");
+            } finally {
+                variantUnmergeAll.disabled = false;
+                variantUnmergeAll.textContent = "Separate All";
             }
             return;
         }
