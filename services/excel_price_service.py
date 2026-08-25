@@ -938,6 +938,10 @@ async def create_master_price_preview(
                 db.execute(insert(ProductImportRow).values(chunk))
                 db.flush()
 
+            # Detect variant groups for new products
+            from services.variant_detection_service import apply_variant_detection_to_batch
+            apply_variant_detection_to_batch(db=db, batch_id=product_batch.id)
+
         batch.total_rows = len(extracted_rows)
         batch.changed_rows = changed_rows
         batch.unchanged_rows = unchanged_rows

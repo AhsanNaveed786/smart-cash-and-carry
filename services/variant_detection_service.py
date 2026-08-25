@@ -162,7 +162,33 @@ def get_variant_groups(
             )
         ).all()
     )
-    
+
+    if not rows:
+        # Check if there are active rows that need detection run
+        has_pending = db.scalar(
+            select(func.count(ProductImportRow.id)).where(
+                ProductImportRow.batch_id == batch_id,
+                ProductImportRow.item_name.isnot(None),
+            )
+        )
+        if has_pending and has_pending > 0:
+            apply_variant_detection_to_batch(db=db, batch_id=batch_id)
+            db.commit()
+
+            rows = list(
+                db.scalars(
+                    select(ProductImportRow)
+                    .where(
+                        ProductImportRow.batch_id == batch_id,
+                        ProductImportRow.variant_group_key.isnot(None),
+                    )
+                    .order_by(
+                        ProductImportRow.variant_group_key,
+                        ProductImportRow.uploaded_price,
+                    )
+                ).all()
+            )
+
     groups = defaultdict(list)
     for row in rows:
         groups[row.variant_group_key].append(row)
