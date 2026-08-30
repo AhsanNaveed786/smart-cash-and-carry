@@ -113,6 +113,9 @@ def update_website_settings(
                 ]
             )
 
+        if "delivery_charges" in update_data and update_data["delivery_charges"] is not None:
+            settings.delivery_charges = update_data["delivery_charges"]
+
         db.commit()
         db.refresh(settings)
 

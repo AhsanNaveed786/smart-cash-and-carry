@@ -1128,6 +1128,10 @@ class WebsiteSettingUpdate(SchemaBase):
         max_length=300,
     )
     announcement_is_active: bool | None = None
+    delivery_charges: Decimal | None = Field(
+        default=None,
+        ge=0,
+    )
 
 
 class WebsiteSettingResponse(SchemaBase):
@@ -1137,6 +1141,7 @@ class WebsiteSettingResponse(SchemaBase):
     announcement_primary: str | None
     announcement_secondary: str | None
     announcement_is_active: bool
+    delivery_charges: Decimal
     created_at: datetime
     updated_at: datetime
 

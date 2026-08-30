@@ -14,6 +14,7 @@ from models import (
     OrderItem,
     OrderStatusHistory,
     ProductVariant,
+    WebsiteSetting,
 )
 from schemas import CartQuoteRequest, OrderCreateRequest, OrderStatusUpdate
 from services.availability_service import (
@@ -243,7 +244,12 @@ def quote_cart(
         else Decimal("0.00")
     )
     minimum_order_met = subtotal >= minimum_order_amount
-    delivery_fee = FREE_DELIVERY_FEE
+    
+    settings = db.get(WebsiteSetting, 1)
+    if quote_data.fulfillment_method == "home_delivery":
+        delivery_fee = settings.delivery_charges if settings else Decimal("0.00")
+    else:
+        delivery_fee = Decimal("0.00")
 
     return {
         "branch_id": quote_data.branch_id,

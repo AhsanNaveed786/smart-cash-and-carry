@@ -628,6 +628,7 @@
         form.announcement_primary.value = settings.announcement_primary || "";
         form.announcement_secondary.value = settings.announcement_secondary || "";
         form.announcement_is_active.checked = settings.announcement_is_active;
+        if (form.delivery_charges) form.delivery_charges.value = settings.delivery_charges || 0;
         const logoPreview = document.getElementById("website-logo-preview");
         const logoImage = document.getElementById("website-logo-preview-image");
 
@@ -747,6 +748,7 @@
             data.announcement_primary = data.announcement_primary.trim() || null;
             data.announcement_secondary = data.announcement_secondary.trim() || null;
             data.announcement_is_active = form.announcement_is_active.checked;
+            data.delivery_charges = parseFloat(form.delivery_charges?.value || "0");
             try {
                 await API.patch("/api/content/settings", data);
                 await loadContent();
