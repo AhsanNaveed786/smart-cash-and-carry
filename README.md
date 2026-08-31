@@ -19,3 +19,4 @@ An e-commerce storefront and administration backend system built with Python, Fa
 - **Media & File Handling:** Pillow, python-multipart, Cloudinary
 - **Data Imports:** openpyxl, xlrd (Excel support)
 - **Server:** Uvicorn
+....
