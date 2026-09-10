@@ -8,6 +8,11 @@ from fastapi import (
 )
 from sqlalchemy.orm import Session
 
+from dependencies.admin_access import (
+    require_admin_write_csrf,
+    require_super_admin,
+)
+from models import Admin
 from database import get_db
 from schemas import (
     HomepageBannerCreate,
@@ -51,10 +56,12 @@ def view_website_settings(
 @router.patch(
     "/settings",
     response_model=WebsiteSettingResponse,
+    dependencies=[Depends(require_admin_write_csrf)],
 )
 def edit_website_settings(
     settings_data: WebsiteSettingUpdate,
     db: Session = Depends(get_db),
+    _super_admin: Admin = Depends(require_super_admin),
 ):
     return update_website_settings(
         db=db,
@@ -65,10 +72,12 @@ def edit_website_settings(
 @router.post(
     "/settings/logo",
     response_model=WebsiteSettingResponse,
+    dependencies=[Depends(require_admin_write_csrf)],
 )
 async def upload_logo(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
+    _super_admin: Admin = Depends(require_super_admin),
 ):
     return await upload_website_logo(
         db=db,
@@ -79,9 +88,11 @@ async def upload_logo(
 @router.delete(
     "/settings/logo",
     response_model=WebsiteSettingResponse,
+    dependencies=[Depends(require_admin_write_csrf)],
 )
 def delete_logo(
     db: Session = Depends(get_db),
+    _super_admin: Admin = Depends(require_super_admin),
 ):
     return remove_website_logo(db)
 

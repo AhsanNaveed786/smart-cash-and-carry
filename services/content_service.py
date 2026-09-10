@@ -116,6 +116,12 @@ def update_website_settings(
         if "delivery_charges" in update_data and update_data["delivery_charges"] is not None:
             settings.delivery_charges = update_data["delivery_charges"]
 
+        if "free_delivery_threshold" in update_data and update_data["free_delivery_threshold"] is not None:
+            settings.free_delivery_threshold = update_data["free_delivery_threshold"]
+
+        if "min_order_amount_for_delivery" in update_data and update_data["min_order_amount_for_delivery"] is not None:
+            settings.min_order_amount_for_delivery = update_data["min_order_amount_for_delivery"]
+
         db.commit()
         db.refresh(settings)
 

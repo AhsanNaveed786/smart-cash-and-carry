@@ -308,6 +308,75 @@ svg { display: block; flex-shrink: 0; }
 .sidebar-footer button { color: #f87171; }
 .sidebar-footer button:hover { color: #fca5a5; }
 
+.admin-dev-credit {
+    padding: 10px 10px;
+    margin: 6px 0 8px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+.admin-dev-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    margin-bottom: 2px;
+}
+.admin-dev-header small {
+    color: var(--sidebar-muted, #94a3b8);
+    font-size: 0.64rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.admin-dev-link {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px;
+    color: #e2e8f0;
+    text-decoration: none;
+    font-size: 0.73rem;
+    padding: 2px 0;
+    transition: color 0.2s;
+}
+.admin-dev-link:hover {
+    color: #34d399;
+}
+.admin-dev-link strong {
+    color: #ffffff;
+    font-weight: 700;
+}
+.admin-dev-link span {
+    color: #6ee7b7;
+    font-size: 0.68rem;
+    font-family: monospace, sans-serif;
+}
+.admin-dev-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 1px 6px;
+    border-radius: 999px;
+    background: rgba(16, 185, 129, 0.15);
+    border: 1px solid rgba(52, 211, 153, 0.35);
+    color: #34d399;
+    font-size: 0.58rem;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+}
+.admin-dev-dot {
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: #34d399;
+    box-shadow: 0 0 5px #34d399;
+}
+
+
 /* ----------------------------------------------------------
    Top bar
    ---------------------------------------------------------- */

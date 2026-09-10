@@ -238,24 +238,43 @@ def quote_cart(
         )
 
     subtotal = money(subtotal)
-    minimum_order_amount = (
-        MINIMUM_HOME_DELIVERY_ORDER
-        if quote_data.fulfillment_method == "home_delivery"
+    settings = db.get(WebsiteSetting, 1)
+
+    min_delivery_order = (
+        settings.min_order_amount_for_delivery
+        if settings and settings.min_order_amount_for_delivery is not None
         else Decimal("0.00")
     )
-    minimum_order_met = subtotal >= minimum_order_amount
-    
-    settings = db.get(WebsiteSetting, 1)
+    free_delivery_threshold = (
+        settings.free_delivery_threshold
+        if settings and settings.free_delivery_threshold is not None
+        else Decimal("3000.00")
+    )
+    standard_delivery_fee = (
+        settings.delivery_charges
+        if settings and settings.delivery_charges is not None
+        else Decimal("0.00")
+    )
+
     if quote_data.fulfillment_method == "home_delivery":
-        delivery_fee = settings.delivery_charges if settings else Decimal("0.00")
+        minimum_order_amount = min_delivery_order
+        # Free delivery if subtotal reaches threshold (and threshold > 0)
+        if free_delivery_threshold > 0 and subtotal >= free_delivery_threshold:
+            delivery_fee = Decimal("0.00")
+        else:
+            delivery_fee = standard_delivery_fee
     else:
+        minimum_order_amount = Decimal("0.00")
         delivery_fee = Decimal("0.00")
+
+    minimum_order_met = subtotal >= minimum_order_amount
 
     return {
         "branch_id": quote_data.branch_id,
         "fulfillment_method": quote_data.fulfillment_method,
         "subtotal": subtotal,
         "delivery_fee": delivery_fee,
+        "free_delivery_threshold": free_delivery_threshold,
         "total_amount": money(subtotal + delivery_fee),
         "minimum_order_amount": minimum_order_amount,
         "minimum_order_met": minimum_order_met,
@@ -304,10 +323,12 @@ def create_order(
     quote = quote_cart(db=db, quote_data=order_data)
 
     if not quote["minimum_order_met"]:
+        min_amount = quote["minimum_order_amount"]
+        min_formatted = f"Rs. {min_amount:,.0f}" if min_amount % 1 == 0 else f"Rs. {min_amount:,.2f}"
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
-                "message": "Minimum home-delivery order is Rs. 3,000.",
+                "message": f"Minimum home-delivery order is {min_formatted}.",
                 "subtotal": str(quote["subtotal"]),
                 "minimum_order_amount": str(
                     quote["minimum_order_amount"]

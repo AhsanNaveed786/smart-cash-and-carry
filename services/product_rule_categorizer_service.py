@@ -98,7 +98,7 @@ CATEGORY_RULES: dict[str, list[str]] = {
         r"\bk&n\b", r"\bknns\b", r"\bmenu\b", r"\bmon\s*salwa\b", r"\bseasons\b",
     ],
     "Fruits & Vegetables": [
-        r"\bapple\b", r"\bbanana\b", r"\bmango\b", r"\borange\b", r"\bcitrus\b", r"\bpotato\b",
+        r"\bapple(?!\s+(juicer|vinegar|cider|watch|phone|iphone|mac|ipad))\b", r"\bbanana\b", r"\bmango\b", r"\borange\b", r"\bcitrus\b", r"\bpotato\b",
         r"\baloo\b", r"\bonion\b", r"\bpyaz\b", r"\btomato\b", r"\btamatar\b", r"\bginger\b",
         r"\badrak\b", r"\bgarlic\b", r"\blehsan\b", r"\blemon\b", r"\bleemu\b", r"\bchili\b",
         r"\bmirchi\b", r"\bcoriander\b", r"\bdhaniya\b", r"\bmint\b", r"\bpudina\b",

@@ -47,11 +47,14 @@ def create_whatsapp_order_link(
     cart_quote = quote_cart(db=db, quote_data=order_data)
 
     if not cart_quote["minimum_order_met"]:
+        min_amount = cart_quote["minimum_order_amount"]
+        min_formatted = f"Rs. {min_amount:,.0f}" if min_amount % 1 == 0 else f"Rs. {min_amount:,.2f}"
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
-                "message": "Minimum home-delivery order is Rs. 3,000.",
+                "message": f"Minimum home-delivery order is {min_formatted}.",
                 "subtotal": str(cart_quote["subtotal"]),
+                "minimum_order_amount": str(min_amount),
             },
         )
 
@@ -89,20 +92,29 @@ def create_whatsapp_order_link(
             f"= Rs. {item['line_total']}"
         )
 
-    message_lines.extend(
-        [
-            "",
-            f"Subtotal: Rs. {cart_quote['subtotal']}",
-            f"Total: Rs. {cart_quote['total_amount']}",
-            "Payment: Cash on Delivery"
-            if order_data.fulfillment_method == "home_delivery"
-            else "Payment: Pay at Store",
-            (
-                "Process after: "
-                f"{local_process_time.strftime('%d %b %Y, %I:%M %p')}"
-            ),
-        ]
-    )
+    summary_lines = [
+        "",
+        f"Subtotal: Rs. {cart_quote['subtotal']}",
+    ]
+
+    if order_data.fulfillment_method == "home_delivery":
+        if cart_quote["delivery_fee"] > 0:
+            summary_lines.append(f"Delivery Fee: Rs. {cart_quote['delivery_fee']}")
+        else:
+            summary_lines.append("Delivery Fee: FREE")
+
+    summary_lines.extend([
+        f"Total: Rs. {cart_quote['total_amount']}",
+        "Payment: Cash on Delivery"
+        if order_data.fulfillment_method == "home_delivery"
+        else "Payment: Pay at Store",
+        (
+            "Process after: "
+            f"{local_process_time.strftime('%d %b %Y, %I:%M %p')}"
+        ),
+    ])
+
+    message_lines.extend(summary_lines)
 
     if order_data.notes:
         message_lines.extend(["", f"Notes: {order_data.notes}"])

@@ -628,7 +628,9 @@
         form.announcement_primary.value = settings.announcement_primary || "";
         form.announcement_secondary.value = settings.announcement_secondary || "";
         form.announcement_is_active.checked = settings.announcement_is_active;
-        if (form.delivery_charges) form.delivery_charges.value = settings.delivery_charges || 0;
+        if (form.delivery_charges) form.delivery_charges.value = settings.delivery_charges !== undefined && settings.delivery_charges !== null ? settings.delivery_charges : 0;
+        if (form.free_delivery_threshold) form.free_delivery_threshold.value = settings.free_delivery_threshold !== undefined && settings.free_delivery_threshold !== null ? settings.free_delivery_threshold : 3000;
+        if (form.min_order_amount_for_delivery) form.min_order_amount_for_delivery.value = settings.min_order_amount_for_delivery !== undefined && settings.min_order_amount_for_delivery !== null ? settings.min_order_amount_for_delivery : 0;
         const logoPreview = document.getElementById("website-logo-preview");
         const logoImage = document.getElementById("website-logo-preview-image");
 
@@ -749,6 +751,8 @@
             data.announcement_secondary = data.announcement_secondary.trim() || null;
             data.announcement_is_active = form.announcement_is_active.checked;
             data.delivery_charges = parseFloat(form.delivery_charges?.value || "0");
+            data.free_delivery_threshold = parseFloat(form.free_delivery_threshold?.value || "0");
+            data.min_order_amount_for_delivery = parseFloat(form.min_order_amount_for_delivery?.value || "0");
             try {
                 await API.patch("/api/content/settings", data);
                 await loadContent();

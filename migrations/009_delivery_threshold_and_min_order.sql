@@ -1,0 +1,3 @@
+ALTER TABLE website_settings
+ADD COLUMN IF NOT EXISTS free_delivery_threshold NUMERIC(12, 2) NOT NULL DEFAULT 3000.00,
+ADD COLUMN IF NOT EXISTS min_order_amount_for_delivery NUMERIC(12, 2) NOT NULL DEFAULT 0.00;

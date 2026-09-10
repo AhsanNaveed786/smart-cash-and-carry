@@ -1132,6 +1132,14 @@ class WebsiteSettingUpdate(SchemaBase):
         default=None,
         ge=0,
     )
+    free_delivery_threshold: Decimal | None = Field(
+        default=None,
+        ge=0,
+    )
+    min_order_amount_for_delivery: Decimal | None = Field(
+        default=None,
+        ge=0,
+    )
 
 
 class WebsiteSettingResponse(SchemaBase):
@@ -1142,6 +1150,8 @@ class WebsiteSettingResponse(SchemaBase):
     announcement_secondary: str | None
     announcement_is_active: bool
     delivery_charges: Decimal
+    free_delivery_threshold: Decimal
+    min_order_amount_for_delivery: Decimal
     created_at: datetime
     updated_at: datetime
 
@@ -1472,6 +1482,7 @@ class CartQuoteResponse(SchemaBase):
     ]
     subtotal: Decimal
     delivery_fee: Decimal
+    free_delivery_threshold: Decimal | None = None
     total_amount: Decimal
     minimum_order_amount: Decimal
     minimum_order_met: bool

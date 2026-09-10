@@ -7,11 +7,20 @@ from fastapi import HTTPException, status
 from models import ProductImportRow
 from services.excel_price_service import clean_product_name
 
-SIZE_PATTERN = re.compile(
-    r'\b(\d+(?:\.\d+)?)\s*'
-    r'(ml|l|ltr|litre|liter|g|gm|gram|grams|kg|kilogram|'
+VARIANT_PATTERN = re.compile(
+    r'\b(?:'
+    r'(?:\d+(?:\.\d+)?(?:x\d+)?(?:-\d+)?)\s*'
+    r'(?:ml|l|ltr|litre|liter|g|gm|gram|grams|kg|kilogram|'
     r'oz|lb|pcs?|pieces?|pack|rolls?|sheets?|capsules?|tablets?|'
-    r'sachets?|strips?|units?)\b',
+    r'sachets?|strips?|units?|inch|inches|cm|m|meter|meters|'
+    r'mm|v|w|watt|watts)'
+    r'|'
+    r'small|medium|large|extra\s*large|mini|jumbo|xl|xxl'
+    r'|'
+    r'red|blue|green|yellow|black|white|pink|purple|orange|brown|grey|silver|gold'
+    r'|'
+    r'pack\s*of\s*\d+'
+    r')\b',
     re.IGNORECASE
 )
 
@@ -22,6 +31,7 @@ def extract_base_name_and_size(name: str) -> tuple[str, str | None]:
     'Lipton Tea 200g' → ('Lipton Tea', '200g')
     'Normal Product' → ('Normal Product', None)
     'Nestle Milk 1.5 Liter' → ('Nestle Milk', '1.5 Liter')
+    'T-Shirt Black XL' → ('T-Shirt', 'Black XL')
     """
     if not name:
         return (name, None)
@@ -30,18 +40,25 @@ def extract_base_name_and_size(name: str) -> tuple[str, str | None]:
     if not cleaned:
         return (name, None)
 
-    match = SIZE_PATTERN.search(cleaned)
-    if not match:
+    matches = list(VARIANT_PATTERN.finditer(cleaned))
+    if not matches:
         return (cleaned, None)
 
-    size_label = match.group(0).strip()
-    # Remove the size part from the name to get the base name
-    base_name = cleaned[:match.start()].strip()
-    # Also strip any trailing separators
-    base_name = re.sub(r'[\s\-_/:]+$', '', base_name).strip()
+    split_index = -1
+    for m in matches:
+        if m.start() > 0:
+            base_cand = cleaned[:m.start()].strip()
+            base_cand = re.sub(r'[\s\-_/:]+$', '', base_cand).strip()
+            if base_cand:
+                split_index = m.start()
+                break
 
-    if not base_name:
-        return (cleaned, None)  # Don't strip if nothing remains
+    if split_index == -1:
+        return (cleaned, None)
+
+    base_name = cleaned[:split_index].strip()
+    base_name = re.sub(r'[\s\-_/:]+$', '', base_name).strip()
+    size_label = cleaned[split_index:].strip()
 
     return (base_name, size_label)
 

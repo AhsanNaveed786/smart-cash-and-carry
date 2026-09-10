@@ -178,7 +178,21 @@ def clean_product_name(value: Any) -> str:
     if not text:
         return ""
 
-    cleaned = re.sub(r"^\d+[\s\.\-_/:]*\s*", "", text).strip()
+    cleaned = text
+    # 0. Strip leading special characters and whitespace
+    cleaned = re.sub(r"^[\s%*\-_.+/#@!~]+", "", cleaned).strip()
+
+    # 0.1 Strip SKU codes (word containing both letters and digits, optionally with dash)
+    # e.g., KS720, JQ6886A, NR617-57, PB-80B, A8068
+    cleaned = re.sub(r"^[A-Za-z0-9]+-[A-Za-z0-9]+[\s\.\-_/:]+\s*", "", cleaned).strip()
+    cleaned = re.sub(r"^[A-Za-z]+\d+[A-Za-z0-9]*[\s\.\-_/:]+\s*", "", cleaned).strip()
+    cleaned = re.sub(r"^\d+[A-Za-z]+[A-Za-z0-9]*[\s\.\-_/:]+\s*", "", cleaned).strip()
+
+    # 0.2 Strip pure consonant acronyms (2-4 letters) like LBL, PRS
+    cleaned = re.sub(r"^[^aeiouAEIOU0-9\s]{2,4}[\s\.\-_/:]+\s*", "", cleaned).strip()
+
+    # 0.3 Leading numbers
+    cleaned = re.sub(r"^\d+[\s\.\-_/:]*\s*", "", cleaned).strip()
     
     # 1. Leading + followed by digits
     cleaned = re.sub(r"^\+\d+[\s\.\-_/:]*\s*", "", cleaned).strip()

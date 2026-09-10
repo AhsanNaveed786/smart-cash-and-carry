@@ -79,13 +79,21 @@
                 items: Store.checkoutItems(),
             });
             document.getElementById("checkout-subtotal").textContent = API.formatMoney(currentQuote.subtotal);
-            document.getElementById("checkout-delivery").textContent = API.formatMoney(currentQuote.delivery_fee);
+            const deliveryFeeNum = Number(currentQuote.delivery_fee || 0);
+            document.getElementById("checkout-delivery").textContent = (deliveryFeeNum === 0 && fulfillment() === "home_delivery") ? "FREE" : API.formatMoney(currentQuote.delivery_fee);
             document.getElementById("checkout-total").textContent = API.formatMoney(currentQuote.total_amount);
+
+            const minDelivery = Number(currentQuote.minimum_order_amount || 0);
+            const deliverySubtitle = document.getElementById("checkout-delivery-subtitle");
+            if (deliverySubtitle) {
+                deliverySubtitle.textContent = minDelivery > 0 ? `Minimum order ${API.formatMoney(minDelivery)}` : "Direct to your doorstep";
+            }
+
             if (currentQuote.minimum_order_met) {
                 minimum.textContent = fulfillment() === "home_delivery" ? "✓ Your order qualifies for home delivery." : "✓ Your order is ready for self pickup.";
                 minimum.classList.add("success");
             } else {
-                const remaining = Number(currentQuote.minimum_order_amount) - Number(currentQuote.subtotal);
+                const remaining = minDelivery - Number(currentQuote.subtotal);
                 minimum.textContent = `Add ${API.formatMoney(remaining)} more to reach the home-delivery minimum.`;
             }
             document.querySelectorAll('button[type="submit"], #whatsapp-order, #whatsapp-order-mobile').forEach((button) => { button.disabled = !currentQuote.minimum_order_met; });

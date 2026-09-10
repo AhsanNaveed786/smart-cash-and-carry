@@ -298,6 +298,19 @@
                 || (!primaryText && !secondaryText)
             );
         }
+
+        const trustFreeDelivery = document.getElementById("trust-free-delivery-text");
+        if (trustFreeDelivery) {
+            const threshold = Number(settings.free_delivery_threshold !== undefined ? settings.free_delivery_threshold : 3000);
+            const standardFee = Number(settings.delivery_charges || 0);
+            if (threshold > 0) {
+                trustFreeDelivery.textContent = `On orders above ${API.formatMoney(threshold)}`;
+            } else if (standardFee === 0) {
+                trustFreeDelivery.textContent = "On all online orders";
+            } else {
+                trustFreeDelivery.textContent = `Standard fee: ${API.formatMoney(standardFee)}`;
+            }
+        }
     }
 
     function openBranchModal(force = false) {

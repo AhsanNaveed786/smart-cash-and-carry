@@ -66,6 +66,14 @@
             </nav>
             <div class="sidebar-footer">
                 <a href="/" target="_blank" rel="noopener">View storefront ↗</a>
+                <div class="admin-dev-credit">
+                    <div class="admin-dev-header">
+                        <small>Developed by</small>
+                        <span class="admin-dev-badge"><span class="admin-dev-dot"></span> AI Engineers</span>
+                    </div>
+                    <a href="tel:03456666238" class="admin-dev-link"><strong>Ahsan Naveed</strong> <span>(0345-6666238)</span></a>
+                    <a href="tel:03460147618" class="admin-dev-link"><strong>Hassan Afzal</strong> <span>(0346-0147618)</span></a>
+                </div>
                 <button type="button" id="admin-logout">Sign out</button>
             </div>
         </aside>
@@ -378,7 +386,9 @@
                             <label>Primary announcement<input name="announcement_primary" maxlength="300"></label>
                             <label>Secondary announcement<input name="announcement_secondary" maxlength="300"></label>
                             <label class="check-label"><input type="checkbox" name="announcement_is_active">Show announcement bar</label>
-                            <label>Delivery Charges (Rs.)<input type="number" name="delivery_charges" step="0.01" min="0" required></label>
+                            <label>Standard Delivery Charges (Rs.)<input type="number" name="delivery_charges" step="0.01" min="0" required></label>
+                            <label>Free Delivery On Orders Above (Rs.)<input type="number" name="free_delivery_threshold" step="0.01" min="0" required placeholder="3000.00"><small style="color:var(--text-muted, #666); font-size:12px; margin-top:-4px; display:block;">Orders above this amount get free delivery. Enter 0 to disable free delivery.</small></label>
+                            <label>Minimum Order For Delivery (Rs.)<input type="number" name="min_order_amount_for_delivery" step="0.01" min="0" required placeholder="0.00"><small style="color:var(--text-muted, #666); font-size:12px; margin-top:-4px; display:block;">Customers cannot place home delivery orders below this amount. Enter 0 for no minimum.</small></label>
                             <div class="website-logo-preview" id="website-logo-preview" hidden>
                                 <img id="website-logo-preview-image" alt="Current store logo">
                                 <button class="admin-button danger" id="remove-website-logo" type="button">Remove logo</button>

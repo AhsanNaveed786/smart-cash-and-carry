@@ -127,7 +127,7 @@
         "Your neighborhood grocery store, now at your fingertips.": "آپ کی قریبی گروسری اب آپ کی دسترس میں۔",
         "Fresh prices for your selected branch, easy pickup and reliable home delivery.": "آپ کی منتخب برانچ کی تازہ قیمتیں، آسان پک اپ اور قابلِ اعتماد ہوم ڈیلیوری۔",
         "Free delivery": "مفت ڈیلیوری",
-        "On orders above Rs. 3,000": "3,000 روپے سے زیادہ کے آرڈر پر",
+        "Fast and reliable delivery": "تیز اور قابلِ اعتماد ڈیلیوری",
         "Branch-perfect prices": "برانچ کے مطابق قیمتیں",
         "Matched to your selected store": "آپ کی منتخب برانچ کے مطابق",
         "Carefully prepared": "احتیاط سے تیار",

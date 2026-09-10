@@ -1718,6 +1718,20 @@ class WebsiteSetting(Base):
         server_default="0.00",
     )
 
+    free_delivery_threshold: Mapped[Decimal] = mapped_column(
+        Numeric(12, 2),
+        nullable=False,
+        default=Decimal("3000.00"),
+        server_default="3000.00",
+    )
+
+    min_order_amount_for_delivery: Mapped[Decimal] = mapped_column(
+        Numeric(12, 2),
+        nullable=False,
+        default=Decimal("0.00"),
+        server_default="0.00",
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
