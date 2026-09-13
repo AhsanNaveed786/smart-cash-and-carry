@@ -567,7 +567,7 @@
             .map((category) => `<option value="id:${category.id}" ${Number(selectedId) === category.id ? "selected" : ""}>${esc(category.name)}</option>`)
             .join("");
         const newOption = newName ? `<option value="new:${esc(newName)}" selected>New category: ${esc(newName)}</option>` : "";
-        return `<div class="table-actions"><select data-import-category="${batchId}:${row.id}"><option value="">Choose category</option>${newOption}${existingOptions}</select><button data-use-import-category="${batchId}:${row.id}">Use</button></div>`;
+        return `<div class="table-actions"><select data-import-category="${batchId}:${row.id}"><option value="">Choose category</option>${newOption}${existingOptions}</select></div>`;
     }
 
     async function productImportMarkup(batchId, embedded) {
@@ -1405,3 +1405,27 @@
     document.addEventListener("keydown", handleKeyDown);
     document.addEventListener("DOMContentLoaded", bootstrap);
 })();
+
+
+    document.addEventListener("change", async (event) => {
+        const importCategory = event.target.closest("[data-import-category]");
+        if (importCategory) {
+            const [batchId, rowId] = importCategory.dataset.importCategory.split(":");
+            const value = importCategory.value || "";
+            if (!value) return;
+            const isNew = value.startsWith("new:");
+            try {
+                importCategory.disabled = true;
+                await API.patch(`/api/product-imports/${batchId}/rows/${rowId}/category`, {
+                    confirmed_category_id: isNew ? null : Number(value.split(":")[1]),
+                    confirmed_category_name: isNew ? value.slice(4) : null,
+                    apply_selected: true
+                });
+                await refreshActiveImport();
+                toast("Category applied instantly.");
+            } catch (error) {
+                importCategory.disabled = false;
+                toast(error.message, "error");
+            }
+        }
+    });

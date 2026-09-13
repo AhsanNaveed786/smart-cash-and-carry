@@ -503,10 +503,8 @@ async def create_product_import_preview(
                     row["variant_size_label"] = size_label
 
         # High-Speed chunked bulk insert for 55k+ rows
-        for i in range(0, len(row_dicts), CHUNK_SIZE):
-            chunk = row_dicts[i : i + CHUNK_SIZE]
-            db.execute(insert(ProductImportRow).values(chunk))
-            db.flush()
+        db.bulk_insert_mappings(ProductImportRow, row_dicts)
+        db.flush()
 
         batch.valid_rows = valid_rows
         batch.invalid_rows = invalid_rows

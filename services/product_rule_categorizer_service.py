@@ -21,7 +21,7 @@ CATEGORY_RULES: dict[str, list[str]] = {
     "Beverages": [
         r"\btea(?!\s+(poni|strainer|cup|mug|spoon|maker))\b", r"\bchai(?!\s+(poni|strainer|cup|mug|spoon|maker|channi))\b", r"\bgreen\s*tea\b", r"\bblack\s*tea\b", r"\bcoffee(?!\s+(maker|mug|cup|machine))\b",
         r"\bnescafe\b", r"\bjuice(?!\s+(maker|machine|extractor))\b", r"\bjuices\b", r"\bnectar\b", r"\bdrink\b", r"\bdrinks\b",
-        r"\bcola\b", r"\bpepsi\b", r"\bcoke\b", r"\bcoca\s*cola\b", r"\bsprite\b", r"\b7up\b",
+        r"\bcola\b", r"\bpepsi\b", r"\bcoke\b", r"\bnestle\b", r"\bnext\s*cola\b", r"\bcoca\s*cola\b", r"\bsprite\b", r"\b7up\b",
         r"\bfanta\b", r"\bdew\b", r"\bmountain\s*dew\b", r"\bmirinda\b", r"\bwater(?!\s+(gun|bottle|cooler|dispenser|set|glass|jug|filter))\b",
         r"\bmineral\s*water\b", r"\benergy\s*drink\b", r"\bred\s*bull\b", r"\bsting\b",
         r"\btang\b", r"\brooh\s*afza\b", r"\bjam-e-shirin\b", r"\bsquash\b", r"\bsyrup\b",

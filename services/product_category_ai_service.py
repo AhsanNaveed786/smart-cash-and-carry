@@ -304,12 +304,13 @@ def quick_auto_categorize_product_import_rows(
         cat_id, new_cat_name = classify_product_name(
             row.item_name or "", categories_by_name
         )
+
         if cat_id is not None or new_cat_name is not None:
             row.suggested_category_id = cat_id
             row.suggested_category_name = new_cat_name
             row.confirmed_category_id = cat_id
             row.confirmed_category_name = new_cat_name
-            row.category_source = "ai"  # rule-assisted
+            row.category_source = "ai"
             row.category_confidence = Decimal("0.9500")
             row.ai_reason = (
                 f"Auto-matched keyword rule for {new_cat_name or 'category'}"
