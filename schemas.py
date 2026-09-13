@@ -1140,6 +1140,10 @@ class WebsiteSettingUpdate(SchemaBase):
         default=None,
         ge=0,
     )
+    theme_color: str | None = Field(
+        default=None,
+        max_length=20,
+    )
 
 
 class WebsiteSettingResponse(SchemaBase):
@@ -1152,6 +1156,7 @@ class WebsiteSettingResponse(SchemaBase):
     delivery_charges: Decimal
     free_delivery_threshold: Decimal
     min_order_amount_for_delivery: Decimal
+    theme_color: str
     created_at: datetime
     updated_at: datetime
 

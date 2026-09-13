@@ -122,6 +122,9 @@ def update_website_settings(
         if "min_order_amount_for_delivery" in update_data and update_data["min_order_amount_for_delivery"] is not None:
             settings.min_order_amount_for_delivery = update_data["min_order_amount_for_delivery"]
 
+        if "theme_color" in update_data and update_data["theme_color"] is not None:
+            settings.theme_color = update_data["theme_color"]
+
         db.commit()
         db.refresh(settings)
 

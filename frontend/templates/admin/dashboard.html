@@ -9,6 +9,19 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', path='/css/admin.css') }}?v=20260831-1">
+    {% if theme_color %}
+    <style>
+        :root {
+            --green-700: {{ theme_color }};
+            --green-800: color-mix(in srgb, {{ theme_color }} 85%, black);
+            --green-900: color-mix(in srgb, {{ theme_color }} 70%, black);
+            --green-950: color-mix(in srgb, {{ theme_color }} 50%, black);
+            --green-600: color-mix(in srgb, {{ theme_color }} 80%, white);
+            --green-100: color-mix(in srgb, {{ theme_color }} 15%, white);
+            --green-50: color-mix(in srgb, {{ theme_color }} 8%, white);
+        }
+    </style>
+    {% endif %}
 </head>
 <body class="admin-app-page">
     <div class="admin-loading" id="admin-loading">
@@ -389,6 +402,7 @@
                             <label>Standard Delivery Charges (Rs.)<input type="number" name="delivery_charges" step="0.01" min="0" required></label>
                             <label>Free Delivery On Orders Above (Rs.)<input type="number" name="free_delivery_threshold" step="0.01" min="0" required placeholder="3000.00"><small style="color:var(--text-muted, #666); font-size:12px; margin-top:-4px; display:block;">Orders above this amount get free delivery. Enter 0 to disable free delivery.</small></label>
                             <label>Minimum Order For Delivery (Rs.)<input type="number" name="min_order_amount_for_delivery" step="0.01" min="0" required placeholder="0.00"><small style="color:var(--text-muted, #666); font-size:12px; margin-top:-4px; display:block;">Customers cannot place home delivery orders below this amount. Enter 0 for no minimum.</small></label>
+                            <label>Theme Color<input type="color" name="theme_color" required value="#005c4b" style="height: 40px; padding: 2px;"><small style="color:var(--text-muted, #666); font-size:12px; margin-top:-4px; display:block;">Sets the primary brand color across the entire website.</small></label>
                             <div class="website-logo-preview" id="website-logo-preview" hidden>
                                 <img id="website-logo-preview-image" alt="Current store logo">
                                 <button class="admin-button danger" id="remove-website-logo" type="button">Remove logo</button>

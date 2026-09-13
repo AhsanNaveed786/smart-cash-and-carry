@@ -238,6 +238,18 @@
         const settings = state.content?.settings;
         if (!settings) return;
 
+        if (settings.theme_color) {
+            const root = document.documentElement;
+            const tc = settings.theme_color;
+            root.style.setProperty('--primary-700', tc);
+            root.style.setProperty('--primary-800', `color-mix(in srgb, ${tc} 85%, black)`);
+            root.style.setProperty('--primary-900', `color-mix(in srgb, ${tc} 70%, black)`);
+            root.style.setProperty('--primary-950', `color-mix(in srgb, ${tc} 50%, black)`);
+            root.style.setProperty('--primary-600', `color-mix(in srgb, ${tc} 80%, white)`);
+            root.style.setProperty('--primary-100', `color-mix(in srgb, ${tc} 15%, white)`);
+            root.style.setProperty('--primary-50', `color-mix(in srgb, ${tc} 8%, white)`);
+        }
+
         document.querySelectorAll("#store-name").forEach((node) => {
             node.textContent = settings.store_name;
         });

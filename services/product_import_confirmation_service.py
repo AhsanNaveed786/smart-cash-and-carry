@@ -96,6 +96,8 @@ def confirm_product_import_row_category(
                 detail="Category cannot be assigned to this row.",
             )
 
+        was_ready = (import_row.status == "ready" and import_row.apply_selected)
+
         import_row.apply_selected = confirmation.apply_selected
         if confirmation.apply_selected:
             if confirmation.confirmed_category_id is not None:
@@ -115,7 +117,23 @@ def confirm_product_import_row_category(
             import_row.status = "ready"
             import_row.error_message = None
 
-        update_batch_progress(db, batch)
+        is_ready = (import_row.status == "ready" and import_row.apply_selected)
+
+        if not was_ready and is_ready:
+            batch.categorized_rows = (batch.categorized_rows or 0) + 1
+        elif was_ready and not is_ready:
+            batch.categorized_rows = max(0, (batch.categorized_rows or 0) - 1)
+
+        # Ultra-fast exists check instead of slow COUNT
+        pending_exists = db.scalar(
+            select(1).where(
+                ProductImportRow.batch_id == batch_id,
+                ProductImportRow.status == "pending_category",
+                ProductImportRow.apply_selected.is_(True),
+            ).limit(1)
+        )
+        batch.status = "preview" if pending_exists else "categorized"
+
         db.commit()
         db.refresh(import_row)
         return import_row

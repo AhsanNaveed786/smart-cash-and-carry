@@ -162,10 +162,22 @@
 
     async function bootstrap() {
         try {
-            [state.access, state.branches] = await Promise.all([
+            [state.access, state.branches, state.contentSettings] = await Promise.all([
                 API.get("/api/admin/access/me"),
                 API.get("/api/branches?active_only=false"),
+                API.get("/api/content/settings"),
             ]);
+            if (state.contentSettings?.theme_color) {
+                const root = document.documentElement;
+                const tc = state.contentSettings.theme_color;
+                root.style.setProperty('--green-700', tc);
+                root.style.setProperty('--green-800', `color-mix(in srgb, ${tc} 85%, black)`);
+                root.style.setProperty('--green-900', `color-mix(in srgb, ${tc} 70%, black)`);
+                root.style.setProperty('--green-950', `color-mix(in srgb, ${tc} 50%, black)`);
+                root.style.setProperty('--green-600', `color-mix(in srgb, ${tc} 80%, white)`);
+                root.style.setProperty('--green-100', `color-mix(in srgb, ${tc} 15%, white)`);
+                root.style.setProperty('--green-50', `color-mix(in srgb, ${tc} 8%, white)`);
+            }
             applyAccess();
             populateBranchSelects();
             document.getElementById("admin-date").textContent = new Intl.DateTimeFormat("en-PK", { dateStyle: "full" }).format(new Date());
@@ -623,6 +635,17 @@
 
     async function loadContent() {
         const [settings, banners] = await Promise.all([API.get("/api/content/settings"), API.get("/api/content/banners")]);
+        if (settings.theme_color) {
+            const root = document.documentElement;
+            const tc = settings.theme_color;
+            root.style.setProperty('--green-700', tc);
+            root.style.setProperty('--green-800', `color-mix(in srgb, ${tc} 85%, black)`);
+            root.style.setProperty('--green-900', `color-mix(in srgb, ${tc} 70%, black)`);
+            root.style.setProperty('--green-950', `color-mix(in srgb, ${tc} 50%, black)`);
+            root.style.setProperty('--green-600', `color-mix(in srgb, ${tc} 80%, white)`);
+            root.style.setProperty('--green-100', `color-mix(in srgb, ${tc} 15%, white)`);
+            root.style.setProperty('--green-50', `color-mix(in srgb, ${tc} 8%, white)`);
+        }
         const form = document.getElementById("settings-form");
         form.store_name.value = settings.store_name;
         form.announcement_primary.value = settings.announcement_primary || "";
@@ -631,6 +654,7 @@
         if (form.delivery_charges) form.delivery_charges.value = settings.delivery_charges !== undefined && settings.delivery_charges !== null ? settings.delivery_charges : 0;
         if (form.free_delivery_threshold) form.free_delivery_threshold.value = settings.free_delivery_threshold !== undefined && settings.free_delivery_threshold !== null ? settings.free_delivery_threshold : 3000;
         if (form.min_order_amount_for_delivery) form.min_order_amount_for_delivery.value = settings.min_order_amount_for_delivery !== undefined && settings.min_order_amount_for_delivery !== null ? settings.min_order_amount_for_delivery : 0;
+        if (form.theme_color) form.theme_color.value = settings.theme_color || "#005c4b";
         const logoPreview = document.getElementById("website-logo-preview");
         const logoImage = document.getElementById("website-logo-preview-image");
 
@@ -753,6 +777,7 @@
             data.delivery_charges = parseFloat(form.delivery_charges?.value || "0");
             data.free_delivery_threshold = parseFloat(form.free_delivery_threshold?.value || "0");
             data.min_order_amount_for_delivery = parseFloat(form.min_order_amount_for_delivery?.value || "0");
+            data.theme_color = form.theme_color?.value || "#005c4b";
             try {
                 await API.patch("/api/content/settings", data);
                 await loadContent();

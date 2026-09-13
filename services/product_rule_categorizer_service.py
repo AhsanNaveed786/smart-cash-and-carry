@@ -6,7 +6,7 @@ from services.excel_price_service import clean_product_name
 # Core category rule definitions mapping category archetype names to regex patterns / keywords
 CATEGORY_RULES: dict[str, list[str]] = {
     "Toys": [
-        r"\btoy\b", r"\btoys\b", r"\bcar\b", r"\bcars\b", r"\bsport\s*car\b", r"\btrain\b",
+        r"\btoy\b", r"\btoys\b", r"\bcar(?!\s+(charger|perfume|air|freshener))\b", r"\bcars\b", r"\bsport\s*car\b", r"\btrain\b",
         r"\bdoll\b", r"\bdolls\b", r"\blego\b", r"\bpuzzle\b", r"\bgame\b", r"\bgames\b",
         r"\brobot\b", r"\bdance\s*hero\b", r"\bsuper\s*hero\b", r"\bhero\b", r"\bdrone\b",
         r"\brc\b", r"\bdiecast\b", r"\baction\s*figure\b", r"\bplay\s*set\b", r"\bplayset\b",
@@ -22,7 +22,7 @@ CATEGORY_RULES: dict[str, list[str]] = {
         r"\btea(?!\s+(poni|strainer|cup|mug|spoon|maker))\b", r"\bchai(?!\s+(poni|strainer|cup|mug|spoon|maker|channi))\b", r"\bgreen\s*tea\b", r"\bblack\s*tea\b", r"\bcoffee(?!\s+(maker|mug|cup|machine))\b",
         r"\bnescafe\b", r"\bjuice(?!\s+(maker|machine|extractor))\b", r"\bjuices\b", r"\bnectar\b", r"\bdrink\b", r"\bdrinks\b",
         r"\bcola\b", r"\bpepsi\b", r"\bcoke\b", r"\bcoca\s*cola\b", r"\bsprite\b", r"\b7up\b",
-        r"\bfanta\b", r"\bdew\b", r"\bmountain\s*dew\b", r"\bmirinda\b", r"\bwater(?!\s+(gun|bottle|cooler|dispenser))\b",
+        r"\bfanta\b", r"\bdew\b", r"\bmountain\s*dew\b", r"\bmirinda\b", r"\bwater(?!\s+(gun|bottle|cooler|dispenser|set|glass|jug|filter))\b",
         r"\bmineral\s*water\b", r"\benergy\s*drink\b", r"\bred\s*bull\b", r"\bsting\b",
         r"\btang\b", r"\brooh\s*afza\b", r"\bjam-e-shirin\b", r"\bsquash\b", r"\bsyrup\b",
         r"\bsoda\b", r"\blemonade\b", r"\bmilkshake\b", r"\bshake\b", r"\bmilo\b", r"\bhorlicks\b",
@@ -31,12 +31,12 @@ CATEGORY_RULES: dict[str, list[str]] = {
     "Dairy & Eggs": [
         r"\bmilk\b", r"\byogurt\b", r"\byoghurt\b", r"\bdahi\b", r"\bbutter\b", r"\bmakhan\b",
         r"\bcheese\b", r"\bghee\b", r"\bdesi\s*ghee\b", r"\bcream\b", r"\bmalai\b",
-        r"\bpaneer\b", r"\begg\b", r"\beggs\b", r"\banday\b", r"\bcondensed\s*milk\b",
+        r"\bpaneer\b", r"\begg(?!\s+(beater|cutter|slicer|tray|boiler))\b", r"\beggs(?!\s+(beater|cutter|slicer|tray|boiler))\b", r"\banday\b", r"\bcondensed\s*milk\b",
         r"\buht\b", r"\btetra\s*pack\b", r"\bolper\b", r"\bolpers\b", r"\bmilkpak\b",
         r"\bnurpur\b", r"\btara\b", r"\beveryday\b", r"\bnido\b", r"\bcheddar\b", r"\bmozzarella\b",
     ],
     "Bakery & Bread": [
-        r"\bbread\b", r"\bbun\b", r"\bbuns\b", r"\brusk\b", r"\brusks\b", r"\bcake\b",
+        r"\bbread(?!\s+(box|knife|maker))\b", r"\bbun\b", r"\bbuns\b", r"\brusk\b", r"\brusks\b", r"\bcake(?!\s+(pan|set|stand|base))\b",
         r"\bcakes\b", r"\bcupcake\b", r"\bpastry\b", r"\bpastries\b", r"\bcroissant\b",
         r"\bmuffin\b", r"\bmuffins\b", r"\bbiscuit\b", r"\bbiscuits\b", r"\bcookie\b",
         r"\bcookies\b", r"\btoast\b", r"\bnaan\b", r"\broti\b", r"\bsheermal\b", r"\btaftan\b",
@@ -45,7 +45,7 @@ CATEGORY_RULES: dict[str, list[str]] = {
     "Snacks & Confectionery": [
         r"\bchips\b", r"\bcrisps\b", r"\bkurkure\b", r"\blays\b", r"\bwavy\b", r"\bnimko\b",
         r"\bpopcorn\b", r"\bchocolate\b", r"\bchocolates\b", r"\bcandy\b", r"\bcandies\b",
-        r"\btoffee\b", r"\btoffees\b", r"\bbubble\s*gum\b", r"\bgum\b", r"\blollipop\b",
+        r"\btoffee\b", r"\btoffees\b", r"\bbubble\s*gum\b", r"\bgum(?!\s+(uhu|stick|nail))\b", r"\blollipop\b",
         r"\blollipops\b", r"\bsnack\b", r"\bsnacks\b", r"\bmarshmallow\b", r"\bcaramel\b",
         r"\bsweets\b", r"\bmithai\b", r"\bslanty\b", r"\bcheetos\b", r"\bdoritos\b",
         r"\bkitkat\b", r"\bdairy\s*milk\b", r"\bsnickers\b", r"\bmars\b", r"\bbounty\b",
@@ -66,6 +66,7 @@ CATEGORY_RULES: dict[str, list[str]] = {
         r"\bnational\b", r"\bshan\b", r"\bhabib\b", r"\bmeezan\b", r"\bdalda\b", r"\bsufi\b",
     ],
     "Personal Care": [
+        r"\blip\s*stick\b", r"\blip\s*pencil\b", r"\beye\s*pencil\b", r"\bnail\s*gum\b", r"\btissue\s*box\b",
         r"\bsoap\b", r"\bsoaps\b", r"\bhand\s*wash\b", r"\bhandwash\b", r"\bshampoo\b",
         r"\bconditioner\b", r"\blotion\b", r"\bbody\s*lotion\b", r"\bcream\b", r"\bface\s*cream\b",
         r"\bface\s*wash\b", r"\bfacewash\b", r"\bbody\s*wash\b", r"\bshower\s*gel\b",
@@ -97,18 +98,18 @@ CATEGORY_RULES: dict[str, list[str]] = {
         r"\bdustbin\b", r"\bbottle\b", r"\biron\s*stand\b", r"\bwiper\b",
     ],
     "Meat & Seafood": [
-        r"\bchicken\b", r"\bbeef\b", r"\bmutton\b", r"\bmeat\b", r"\bfish\b", r"\bprawn\b",
+        r"\bchicken(?!\s+(karahi|masala|powder))\b", r"\bbeef\b", r"\bmutton\b", r"\bmeat(?!\s+(hammer|hamer|mincer|tenderizer))\b", r"\bfish\b", r"\bprawn\b",
         r"\bprawns\b", r"\bseafood\b", r"\bmince\b", r"\bkeema\b", r"\bqeema\b", r"\bwings\b",
         r"\bdrumstick\b", r"\bdrumsticks\b", r"\bnuggets\b", r"\bkabab\b", r"\bkebab\b",
         r"\bpatty\b", r"\bpatties\b", r"\bsausage\b", r"\bsausages\b", r"\bsalami\b",
         r"\bk&n\b", r"\bknns\b", r"\bmenu\b", r"\bmon\s*salwa\b", r"\bseasons\b",
     ],
     "Fruits & Vegetables": [
-        r"\bapple(?!\s+(juicer|vinegar|cider|watch|phone|iphone|mac|ipad))\b", r"\bbanana\b", r"\bmango\b", r"\borange\b", r"\bcitrus\b", r"\bpotato\b",
-        r"\baloo\b", r"\bonion\b", r"\bpyaz\b", r"\btomato\b", r"\btamatar\b", r"\bginger\b",
+        r"\bapple(?!\s+(juicer|vinegar|cider|watch|phone|iphone|mac|ipad))\b", r"\bbanana\b", r"\bmango\b", r"\borange\b", r"\bcitrus\b", r"\bpotato(?!\s+(masher|peeler|cutter))\b",
+        r"\baloo(?!\s+(samosa|roll|paratha))\b", r"\bonion\b", r"\bpyaz\b", r"\btomato\b", r"\btamatar\b", r"\bginger\b",
         r"\badrak\b", r"\bgarlic\b", r"\blehsan\b", r"\blemon\b", r"\bleemu\b", r"\bchili\b",
         r"\bmirchi\b", r"\bcoriander\b", r"\bdhaniya\b", r"\bmint\b", r"\bpudina\b",
-        r"\bcucumber\b", r"\bkheera\b", r"\bvegetable\b", r"\bvegetables\b", r"\bfruit\b",
+        r"\bcucumber\b", r"\bkheera\b", r"\bvegetable(?!\s+(rack|cutter|chopper|slicer))\b", r"\bvegetables\b", r"\bfruit\b",
         r"\bfruits\b", r"\bdry\s*fruit\b", r"\bdry\s*fruits\b", r"\balmond\b", r"\bbadam\b",
         r"\bcashew\b", r"\bkaju\b", r"\bpistachio\b", r"\bpista\b", r"\bwalnut\b",
         r"\bakhorot\b", r"\bpeanut\b", r"\bmoongphali\b", r"\bdates\b", r"\bkhajoor\b",
@@ -127,9 +128,9 @@ CATEGORY_RULES: dict[str, list[str]] = {
         r"\bextension\b", r"\bplug\b", r"\bsocket\b", r"\bmouse\b", r"\bkeyboard\b",
     ],
     "Stationery & Books": [
-        r"\bpen\b", r"\bpens\b", r"\bpencil\b", r"\bpencils\b", r"\beraser\b", r"\bsharpener\b",
+        r"\bpen(?!\s+(candel|drive))\b", r"\bpens\b", r"\bpencil(?!\s+(lip|eye))\b", r"\bpencils\b", r"\beraser\b", r"\bsharpener\b",
         r"\bscale\b", r"\bruler\b", r"\bnotebook\b", r"\bcopy\b", r"\bregister\b",
-        r"\bmarker\b", r"\bmarkers\b", r"\bhighlighter\b", r"\bcolor\b", r"\bcolors\b",
+        r"\bmarker\b", r"\bmarkers\b", r"\bhighlighter\b", r"\bcolor(?!\s+(hair|smog))\b", r"\bcolors\b",
         r"\bpaint\b", r"\bscissors\b", r"\btape\b", r"\bglue\b", r"\bstick\b", r"\bstapler\b",
         r"\bpins\b", r"\bpaper\b", r"\ba4\b", r"\bfile\b", r"\bfolder\b",
     ],

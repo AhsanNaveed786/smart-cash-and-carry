@@ -480,16 +480,33 @@ async def create_product_import_preview(
                 "status": row_status,
                 "apply_selected": (row_status == "pending_category"),
                 "error_message": error_message,
+                "variant_group_key": None,
+                "variant_size_label": None,
             })
+
+        # Fast In-Memory Variant Detection
+        from services.variant_detection_service import extract_base_name_and_size
+        groups = {}
+        for row in row_dicts:
+            if row["status"] in {"pending_category", "ready"} and row["item_name"]:
+                base_name, size_label = extract_base_name_and_size(row["item_name"])
+                if size_label:
+                    group_key = base_name.strip().lower()
+                    if group_key not in groups:
+                        groups[group_key] = []
+                    groups[group_key].append((row, size_label))
+        
+        for group_key, members in groups.items():
+            if len(members) >= 2:
+                for row, size_label in members:
+                    row["variant_group_key"] = group_key
+                    row["variant_size_label"] = size_label
 
         # High-Speed chunked bulk insert for 55k+ rows
         for i in range(0, len(row_dicts), CHUNK_SIZE):
             chunk = row_dicts[i : i + CHUNK_SIZE]
             db.execute(insert(ProductImportRow).values(chunk))
             db.flush()
-
-        # Detect and tag variant groups
-        apply_variant_detection_to_batch(db=db, batch_id=batch.id)
 
         batch.valid_rows = valid_rows
         batch.invalid_rows = invalid_rows

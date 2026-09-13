@@ -1732,6 +1732,13 @@ class WebsiteSetting(Base):
         server_default="0.00",
     )
 
+    theme_color: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="#005c4b",
+        server_default="#005c4b",
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
